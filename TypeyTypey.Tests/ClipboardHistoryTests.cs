@@ -64,17 +64,17 @@ public sealed class ClipboardHistoryTests
 public sealed class CommandLineTests
 {
     [Theory]
-    [InlineData("--type", AppCommand.Type)]
-    [InlineData("--history", AppCommand.History)]
-    [InlineData("--settings", AppCommand.Settings)]
-    [InlineData("--pause", AppCommand.Pause)]
-    [InlineData("--resume", AppCommand.Resume)]
-    [InlineData("--clear-history", AppCommand.ClearHistory)]
-    [InlineData("--exit", AppCommand.Exit)]
-    public void Parse_RecognizesSupportedCommands(string argument, AppCommand expected)
+    [InlineData("--type", "Type")]
+    [InlineData("--history", "History")]
+    [InlineData("--settings", "Settings")]
+    [InlineData("--pause", "Pause")]
+    [InlineData("--resume", "Resume")]
+    [InlineData("--clear-history", "ClearHistory")]
+    [InlineData("--exit", "Exit")]
+    public void Parse_RecognizesSupportedCommands(string argument, string expected)
     {
         Assert.True(CommandLine.TryParse([argument], out AppCommand command));
-        Assert.Equal(expected, command);
+        Assert.Equal(Enum.Parse<AppCommand>(expected), command);
     }
 
     [Fact]

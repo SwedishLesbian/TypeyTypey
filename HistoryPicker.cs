@@ -103,9 +103,10 @@ internal sealed class HistoryPicker : Form
         Close();
     }
 
-    private sealed class HistoryEntry(string text)
+    private sealed class HistoryEntry
     {
-        public string Text { get; } = text;
-        public string Display => text.Replace("\r", " ").Replace("\n", " ⏎ ");
+        public HistoryEntry(string text) => Text = text;
+        public string Text { get; }
+        public string Display => Text.Replace("\r", " ").Replace("\n", " ⏎ ");
     }
 }
