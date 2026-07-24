@@ -8,6 +8,13 @@
     <AssemblyName>TypeyTypey</AssemblyName>
     <RootNamespace>TypeyTypey</RootNamespace>
     <ApplicationIcon>typeytypey.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyTitle>TypeyTypey</AssemblyTitle>
+    <Product>TypeyTypey</Product>
+    <Company>Open Source</Company>
+    <Description>Types clipboard text as simulated keyboard input.</Description>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -16,4 +23,7 @@
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="TypeyTypey.Tests/**/*.cs" />
+  </ItemGroup>
 </Project>

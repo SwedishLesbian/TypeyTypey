@@ -41,14 +41,11 @@ internal static class InputTyper
     public static async Task WaitForModifierReleaseAsync(CancellationToken cancellationToken)
     {
         Keys[] modifiers = [Keys.ControlKey, Keys.LControlKey, Keys.RControlKey, Keys.Menu, Keys.LMenu, Keys.RMenu, Keys.ShiftKey, Keys.LShiftKey, Keys.RShiftKey, Keys.LWin, Keys.RWin];
-
         while (modifiers.Any(key => (GetAsyncKeyState((int)key) & 0x8000) != 0))
         {
             cancellationToken.ThrowIfCancellationRequested();
             await Task.Delay(10, cancellationToken).ConfigureAwait(false);
         }
-
-        // Give the target application one message-loop turn after key-up.
         await Task.Delay(30, cancellationToken).ConfigureAwait(false);
     }
 
@@ -57,17 +54,10 @@ internal static class InputTyper
         foreach (char character in text)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            INPUT[] inputs =
-            [
-                CreateUnicodeInput(character, keyUp: false),
-                CreateUnicodeInput(character, keyUp: true)
-            ];
-
+            INPUT[] inputs = [CreateUnicodeInput(character, keyUp: false), CreateUnicodeInput(character, keyUp: true)];
             uint sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
             if (sent != (uint)inputs.Length)
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows rejected simulated keyboard input.");
-
             if (characterDelayMs > 0)
                 await Task.Delay(characterDelayMs, cancellationToken).ConfigureAwait(false);
         }
@@ -76,16 +66,6 @@ internal static class InputTyper
     private static INPUT CreateUnicodeInput(char character, bool keyUp) => new()
     {
         type = InputKeyboard,
-        U = new InputUnion
-        {
-            ki = new KEYBDINPUT
-            {
-                wVk = 0,
-                wScan = character,
-                dwFlags = KeyeventfUnicode | (keyUp ? KeyeventfKeyup : 0),
-                time = 0,
-                dwExtraInfo = UIntPtr.Zero
-            }
-        }
+        U = new InputUnion { ki = new KEYBDINPUT { wScan = character, dwFlags = KeyeventfUnicode | (keyUp ? KeyeventfKeyup : 0) } }
     };
 }
