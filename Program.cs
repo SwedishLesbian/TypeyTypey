@@ -38,15 +38,13 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
-        using var form = new MainForm();
-        singleInstance.CommandReceived += requestedCommand =>
-        {
-            if (!form.IsDisposed)
-                form.BeginInvoke(() => form.ExecuteCommand(requestedCommand));
-        };
+        // A WindowsFormsSynchronizationContext must exist before the context marshals IPC commands.
+        WindowsFormsSynchronizationContext.AutoInstall = true;
+        using var context = new TrayApplicationContext();
+        singleInstance.CommandReceived += context.PostCommand;
         singleInstance.Listen();
         if (command != AppCommand.None)
-            form.Shown += (_, _) => form.BeginInvoke(() => form.ExecuteCommand(command));
-        Application.Run(form);
+            context.PostCommand(command);
+        Application.Run(context);
     }
 }

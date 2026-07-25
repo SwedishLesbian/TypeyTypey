@@ -15,6 +15,12 @@ internal static class WindowFocus
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    /// <summary>
+    /// Requests foreground for one of our own windows. Windows may refuse when another process owns
+    /// the foreground lock, so the result is advisory and the caller also relies on TopMost.
+    /// </summary>
+    public static bool ForceForeground(IntPtr window) => window != IntPtr.Zero && SetForegroundWindow(window);
+
     public static async Task<bool> RestoreAsync(IntPtr window, CancellationToken cancellationToken)
     {
         if (window == IntPtr.Zero || !IsWindow(window))

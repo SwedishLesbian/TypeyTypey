@@ -2,6 +2,31 @@
 
 All notable changes to TypeyTypey are documented here.
 
+## 1.0.4 - 2026-07-25
+
+Fixes two runtime defects that remained present in v1.0.3. The v1.0.3 changes were in the shipped
+binary but did not produce the intended behaviour, so both are corrected here at the mechanism.
+
+- **Global hotkeys no longer stop working once the Settings window has been opened and closed.**
+  Hotkey registrations belong to a window handle, and WinForms recreates a form's handle whenever
+  `ShowInTaskbar` changes — which closing Settings to the tray did every time. Both hotkeys were
+  destroyed silently. Hotkeys, clipboard monitoring, IPC and typing now live on a dedicated
+  application context with a permanently-lived message window, independent of any visible window.
+- **The Settings window is now genuinely larger.** The v1.0.3 size increase had no visible effect
+  because the process is DPI aware while the form applied no scale factor, so the requested
+  dimensions were consumed as raw device pixels — a 510x610 window on a 150% display. Settings and
+  the history picker now scale correctly at any display scaling.
+- The application starts quietly in the notification area, as documented, instead of opening the
+  Settings window on every launch.
+- Added a **Theme** setting with System default, Light and Dark, applied without restarting.
+  Existing settings files load unchanged and use System default.
+- The command pipe is now restricted to the current user and LocalSystem. The Windows default
+  granted read access to Everyone and to ANONYMOUS LOGON.
+- Failure to register the Windows startup entry now reports an actionable reason instead of being
+  silently swallowed.
+- The displayed version is read from assembly metadata; the executable carries product, description,
+  company and copyright metadata.
+
 ## 1.0.3 - 2026-07-25
 
 - Keep the Clipboard History picker above the active application instead of owning it behind the settings window.

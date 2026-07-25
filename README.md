@@ -21,7 +21,9 @@ Perfect for:
 - Searchable, keyboard-first clipboard-history picker
 - Native Unicode typing via Windows `SendInput`—never clipboard paste
 - Configurable initial and per-character delays
+- Light, Dark, or System-default theme, applied without restarting
 - Quiet notification-area application with standard Windows controls
+- Correct rendering at any Windows display scaling
 - Single-instance operation; CLI commands communicate with the running instance
 - Self-contained, single-file `win-x64` executable
 - Portable: no installer or administrator privileges required
@@ -75,9 +77,9 @@ The executable is produced at `bin\Release\net8.0-windows\win-x64\publish\TypeyT
 
 ### Tray and settings
 
-Double-click the tray icon to open clipboard history. Its menu also offers typing, pause/resume monitoring, clearing history, settings, About, and Exit. Closing the settings window minimizes it to the tray; use **Exit** to end the application and clear its in-memory history.
+TypeyTypey runs in the notification area from the moment it starts; it does not open a window on launch. Double-click the tray icon to open clipboard history. Its menu also offers typing, pause/resume monitoring, clearing history, settings, About, and Exit. Closing the Settings window simply closes it — hotkeys, monitoring and the tray icon are unaffected. Use **Exit** to end the application and clear its in-memory history.
 
-Settings let you change both hotkeys, typing delays, history size, monitoring, startup behavior, and the optional **Run as administrator** mode. Defaults are 15 ms per character, a 500 ms initial delay, and 50 history entries. Use a longer delay when a remote or legacy application drops characters.
+Settings let you change both hotkeys, typing delays, history size, monitoring, theme, startup behavior, and the optional **Run as administrator** mode. Defaults are 15 ms per character, a 500 ms initial delay, 50 history entries, and the **System default** theme, which follows the Windows light/dark app setting. Use a longer delay when a remote or legacy application drops characters.
 
 ### Command line
 

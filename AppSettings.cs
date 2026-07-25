@@ -13,6 +13,7 @@ internal sealed class AppSettings
     public int MaximumHistoryEntries { get; set; } = 50;
     public bool StartWithWindows { get; set; }
     public bool RunAsAdministrator { get; set; }
+    public AppTheme Theme { get; set; } = AppTheme.System;
     public int? WindowLeft { get; set; }
     public int? WindowTop { get; set; }
 
@@ -45,6 +46,10 @@ internal sealed class AppSettings
         CharacterDelayMs = Math.Clamp(CharacterDelayMs, 0, 1_000);
         InitialDelayMs = Math.Clamp(InitialDelayMs, 0, 10_000);
         MaximumHistoryEntries = Math.Clamp(MaximumHistoryEntries, 1, 500);
+        // A settings file written by a newer build, or hand-edited, must not leave an undefined
+        // theme in play. System.Text.Json will happily deserialize any integer into the enum.
+        if (!Enum.IsDefined(Theme))
+            Theme = AppTheme.System;
     }
 
     public void Save()

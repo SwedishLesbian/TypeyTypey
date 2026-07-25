@@ -1,13 +1,32 @@
-# TypeyTypey v1.0.3
+# TypeyTypey v1.0.4
 
 TypeyTypey is a tiny native Windows utility for typing clipboard-derived text into applications where paste is unavailable or unreliable. Copy a password, command, URL, or other text; focus the destination; then let TypeyTypey simulate Unicode keyboard input.
 
-## Improvements in this release
+## Fixes in this release
 
-- The Clipboard History picker now opens above the active application, keeping it accessible when invoked with the global hotkey.
-- The Settings window opens at a more usable default size.
+This release corrects two runtime defects that were still present in v1.0.3. Both v1.0.3 changes
+were in the shipped binary, but neither produced the intended behaviour; v1.0.4 addresses the
+underlying mechanisms.
 
-This version also includes the native `SendInput` layout correction from v1.0.2. TypeyTypey sends the full 64-bit Win32 `INPUT` structure and reports actionable, clipboard-safe Windows error details if simulated typing cannot be sent.
+**Global hotkeys stopped working after Settings had been opened and closed.** A global hotkey
+registration belongs to a specific window handle. WinForms recreates a form's handle whenever
+`ShowInTaskbar` changes, which is exactly what closing the Settings window to the tray did — so both
+hotkeys were destroyed without any error. Hotkeys, clipboard monitoring, command-line relay and
+typing now run on a dedicated application context with a permanently-lived message window, so no
+visible window can take them down.
+
+**The Settings window was not actually larger.** The process is DPI aware but the form applied no
+scale factor, so its requested dimensions were consumed as raw device pixels — on a 150% display
+that produced a 510x610 pixel window. Settings and the history picker now scale properly at any
+display scaling.
+
+## Also in this release
+
+- TypeyTypey starts quietly in the notification area, as documented, rather than opening the Settings window on every launch.
+- New **Theme** setting: System default, Light or Dark, applied immediately without restarting. Existing settings files load unchanged and use System default.
+- The command pipe is restricted to the current user and LocalSystem. The Windows default granted read access to Everyone and to ANONYMOUS LOGON; see `SECURITY.md`.
+- Windows startup registration failures now explain themselves instead of failing silently.
+- The executable carries product, description, company and copyright metadata, and the displayed version comes from assembly metadata.
 
 ## Highlights
 

@@ -8,13 +8,19 @@
     <AssemblyName>TypeyTypey</AssemblyName>
     <RootNamespace>TypeyTypey</RootNamespace>
     <ApplicationIcon>typeytypey.ico</ApplicationIcon>
-    <Version>1.0.3</Version>
-    <AssemblyVersion>1.0.3.0</AssemblyVersion>
-    <FileVersion>1.0.3.0</FileVersion>
-    <AssemblyTitle>TypeyTypey</AssemblyTitle>
+    <Version>1.0.4</Version>
+    <AssemblyVersion>1.0.4.0</AssemblyVersion>
+    <FileVersion>1.0.4.0</FileVersion>
+    <!-- Without this the SDK appends "+<commit sha>" to ProductVersion, which Explorer shows. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <!-- Win32 version resource. AssemblyTitle becomes FileDescription, which is the string
+         Explorer and Task Manager show; Product, Company and Copyright map directly. -->
+    <AssemblyTitle>Types clipboard text as simulated keyboard input</AssemblyTitle>
     <Product>TypeyTypey</Product>
-    <Company>Open Source</Company>
+    <Company>SwedishLesbian</Company>
+    <Copyright>Copyright © 2026 SwedishLesbian</Copyright>
     <Description>Types clipboard text as simulated keyboard input.</Description>
+    <Authors>SwedishLesbian</Authors>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
