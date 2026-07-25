@@ -31,6 +31,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="TypeyTypey.Tests/**/*.cs" />
+    <!-- tools/diagnostics/ScalingDiag is a standalone harness with its own entry point. Without
+         this the default **/*.cs glob would pull it in and collide with Program.Main. -->
+    <Compile Remove="tools/**/*.cs" />
   </ItemGroup>
   <!-- Publishing buries the executable under bin\Release\<tfm>\<rid>\publish\. Copy it to a stable
        bin\TypeyTypey.exe so it is easy to find and run. bin\ is already gitignored. The canonical

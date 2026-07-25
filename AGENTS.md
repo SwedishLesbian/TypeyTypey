@@ -225,6 +225,10 @@ are confirmed; delete this section once the release is tagged.
 The development machine used for v1.0.4 ran at 144 DPI (150%) with UAC disabled and a single admin
 account, which is why these specific gaps exist.
 
+The implementation is complete and committed on the `agent/runtime-ui-theme` branch, unpushed.
+`git log main..HEAD` carries the reasoning for each change; that history is the authoritative record
+of what was done and why, and is not restated here.
+
 ### UAC and elevation — needs UAC enabled and a reboot
 
 With UAC off, an admin account has no split token, every process runs elevated, and no consent
@@ -261,16 +265,17 @@ Only 150% was measurable locally. Settings client is 615x700 logical.
 - [ ] Picker keys: arrows, Enter, Escape, Delete, double-click; only one picker at a time.
 - [ ] History is empty after exit and restart.
 
-### Diagnostic harness
+### Diagnostic probes
 
-Kept outside the repository at `D:\TheEdge\KingslayerTM\_tt_diag` (not version controlled):
+Version controlled at [`tools/diagnostics/`](tools/diagnostics/), which has its own README covering
+each probe and the measurement traps. Run after `.\publish.ps1`; each exits non-zero on failure.
 
-| Script | Purpose |
-|---|---|
-| `probe3.ps1` | Cold start, hotkey paths, Settings sizing, IPC, process survival |
-| `probe-elevation.ps1` | Confirms the elevation notice renders in Settings |
-| `pipe-acl3.ps1` | Reads the command pipe's DACL as SDDL |
-| `Diag.csproj` | Isolated WinForms handle-recreation and autoscaling experiments |
+```powershell
+.\tools\diagnostics\probe-behaviour.ps1    # v1.0.4 runtime regression suite
+.\tools\diagnostics\probe-elevation.ps1    # elevation notice matches elevation state
+.\tools\diagnostics\probe-pipe-acl.ps1     # command pipe DACL is restricted
+dotnet run --project .\tools\diagnostics\ScalingDiag\ScalingDiag.csproj
+```
 
 Probes must set `PER_MONITOR_AWARE_V2` before any `GetWindowRect` call. PowerShell is DPI-unaware by
 default and Windows silently virtualises the results, which produced measurements off by exactly the
