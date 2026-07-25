@@ -38,8 +38,9 @@ internal sealed class MainForm : Form
         _applicationIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
 
         Text = "TypeyTypey Settings";
-        ClientSize = new Size(590, 470);
-        MinimumSize = new Size(610, 510);
+        // Size is the outer window size, matching the intended compact-but-tall settings layout.
+        Size = new Size(510, 610);
+        MinimumSize = new Size(510, 610);
         StartPosition = FormStartPosition.CenterScreen;
         Icon = _applicationIcon;
         if (_settings.WindowLeft is not null && _settings.WindowTop is not null)
