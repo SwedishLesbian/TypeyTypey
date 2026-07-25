@@ -17,6 +17,7 @@ internal sealed class HistoryPicker : Form
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = false;
+        TopMost = true;
         Controls.Add(_entries);
         Controls.Add(_search);
 
@@ -25,7 +26,13 @@ internal sealed class HistoryPicker : Form
         _entries.KeyDown += OnEntryKeyDown;
         _search.KeyDown += OnSearchKeyDown;
         _history.Changed += OnHistoryChanged;
-        Shown += (_, _) => { RefreshEntries(); _search.Focus(); };
+        Shown += (_, _) =>
+        {
+            RefreshEntries();
+            BringToFront();
+            Activate();
+            _search.Focus();
+        };
     }
 
     public string? SelectedText { get; private set; }

@@ -2,6 +2,10 @@
 
 All notable changes to TypeyTypey are documented here.
 
+## Unreleased
+
+- Keep the Clipboard History picker above the active application instead of owning it behind the settings window.
+
 ## 1.0.2 - 2026-07-25
 
 - Fixed the native `SendInput` ABI layout on 64-bit Windows, which could cause all simulated typing to fail with `ERROR_INVALID_PARAMETER`.

@@ -271,7 +271,7 @@ internal sealed class MainForm : Form
         if (_typingCts is not null) return;
         IntPtr destination = WindowFocus.GetForegroundWindow();
         using var picker = new HistoryPicker(_history);
-        if (picker.ShowDialog(this) == DialogResult.OK && picker.SelectedText is not null)
+        if (picker.ShowDialog() == DialogResult.OK && picker.SelectedText is not null)
             await StartTypingAsync(picker.SelectedText, destination);
     }
 
