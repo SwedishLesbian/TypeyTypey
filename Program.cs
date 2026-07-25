@@ -1,23 +1,52 @@
-using System.Threading;
-
 namespace TypeyTypey;
 
 internal static class Program
 {
-    private const string MutexName = "TypeyTypey.SingleInstance.4D39A83C-52EC-4620-BB73-0265522DF85E";
-
     [STAThread]
     private static void Main()
     {
-        using var mutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
-        if (!createdNew)
+        string[] arguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
+        if (!CommandLine.TryParse(arguments, out AppCommand command, out bool elevatedRestart))
         {
-            MessageBox.Show("TypeyTypey is already running.", "TypeyTypey",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Supported commands: --type, --history, --settings, --pause, --resume, --clear-history, --exit", "TypeyTypey", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
+        AppSettings settings = AppSettings.Load();
+        if (settings.RunAsAdministrator && !PrivilegeManager.IsElevated())
+        {
+            if (PrivilegeManager.TryRestartElevated(arguments))
+                return;
+
+            // A declined UAC request must not cause an elevation prompt on every future launch.
+            settings.RunAsAdministrator = false;
+            settings.Save();
+        }
+
+        using var singleInstance = new SingleInstanceManager();
+        if (!singleInstance.IsPrimaryInstance)
+        {
+            if (elevatedRestart && singleInstance.WaitForPrimaryInstance(TimeSpan.FromSeconds(5)))
+            {
+                // The non-elevated parent has exited and released the mutex; continue as the sole elevated instance.
+            }
+            else
+            {
+                SingleInstanceManager.SendCommand(command == AppCommand.None ? AppCommand.Settings : command);
+                return;
+            }
+        }
+
         ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+        using var form = new MainForm();
+        singleInstance.CommandReceived += requestedCommand =>
+        {
+            if (!form.IsDisposed)
+                form.BeginInvoke(() => form.ExecuteCommand(requestedCommand));
+        };
+        singleInstance.Listen();
+        if (command != AppCommand.None)
+            form.Shown += (_, _) => form.BeginInvoke(() => form.ExecuteCommand(command));
+        Application.Run(form);
     }
 }

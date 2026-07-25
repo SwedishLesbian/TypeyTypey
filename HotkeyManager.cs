@@ -15,7 +15,8 @@ internal enum HotkeyModifiers : uint
 
 internal static class HotkeyManager
 {
-    public const int HotkeyId = 0x5459;
+    public const int TypeClipboardHotkeyId = 0x5459;
+    public const int HistoryHotkeyId = 0x545A;
     public const int WmHotkey = 0x0312;
 
     [DllImport("user32.dll", SetLastError = true)]
