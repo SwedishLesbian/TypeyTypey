@@ -56,34 +56,50 @@ The executable is produced at `bin\Release\net8.0-windows\win-x64\publish\TypeyT
 
 ## Usage
 
-Start TypeyTypey once. It registers its hotkeys, begins clipboard monitoring, and runs in the notification area.
+### Quick start
+
+1. Start `TypeyTypey.exe` once. It registers its hotkeys, starts clipboard monitoring, and runs in the notification area.
+2. Copy the text you need to enter, then click the destination field.
+3. Press `Ctrl+Alt+V`, release the keys, and let TypeyTypey type the value. It uses keyboard input; it never sends Ctrl+V.
+
+### Keyboard shortcuts
 
 | Action | Default shortcut |
 | --- | --- |
 | Type current clipboard text | `Ctrl+Alt+V` |
 | Open clipboard history | `Ctrl+Alt+Shift+V` |
 
-For current clipboard text: copy text, focus the destination, press `Ctrl+Alt+V`, release the modifiers, and TypeyTypey types it after the configured delay.
+**Type current clipboard** reads the clipboard at the moment the shortcut is pressed, waits for the modifier keys to be released, then types the text into the window you had focused. This is the normal path for a password field, console, or legacy application that accepts keystrokes but rejects paste.
 
-For history: press `Ctrl+Alt+Shift+V`, type to filter, use arrow keys to navigate, press Enter to type, Escape to close, or Delete to remove an entry. The picker closes before any typing begins and TypeyTypey restores the captured destination window.
+**Clipboard history** opens a searchable picker of text copied since TypeyTypey started. Type to filter, use arrow keys to navigate, press Enter to select, Escape to close, or Delete to remove the selected item. The picker closes before typing begins and TypeyTypey restores the captured destination window.
 
-Double-click the tray icon to open history. Its menu offers typing, history, pause/resume monitoring, history clearing, settings, About, and Exit. Closing settings minimizes to the tray.
+### Tray and settings
+
+Double-click the tray icon to open clipboard history. Its menu also offers typing, pause/resume monitoring, clearing history, settings, About, and Exit. Closing the settings window minimizes it to the tray; use **Exit** to end the application and clear its in-memory history.
+
+Settings let you change both hotkeys, typing delays, history size, monitoring, startup behavior, and the optional **Run as administrator** mode. Defaults are 15 ms per character, a 500 ms initial delay, and 50 history entries. Use a longer delay when a remote or legacy application drops characters.
 
 ### Command line
 
-The executable remains a GUI tray app. These commands relay to the already-running instance without creating duplicate tray icons or hotkeys:
+The executable remains a GUI tray application. Command-line options are a convenient way to ask the already-running instance to act; they do not create another tray icon or duplicate hotkeys.
 
-```text
-TypeyTypey.exe --type
-TypeyTypey.exe --history
-TypeyTypey.exe --settings
-TypeyTypey.exe --pause
-TypeyTypey.exe --resume
-TypeyTypey.exe --clear-history
-TypeyTypey.exe --exit
+Run them from PowerShell in the folder containing the executable, for example:
+
+```powershell
+.\TypeyTypey.exe --history
 ```
 
-If TypeyTypey is not running, a command starts it, performs the requested action, and leaves it running normally.
+| Command | What it does | Useful when |
+| --- | --- | --- |
+| `TypeyTypey.exe --type` | Reads the current clipboard and starts the same typing flow as `Ctrl+Alt+V`. | Trigger typing from a shortcut, script, or launcher. |
+| `TypeyTypey.exe --history` | Opens the searchable history picker. | Reuse a recently copied command or password without reaching for the tray icon. |
+| `TypeyTypey.exe --settings` | Brings the settings window to the foreground. | Change hotkeys, delays, history limits, or startup options. |
+| `TypeyTypey.exe --pause` | Stops adding new clipboard values to TypeyTypey history. Existing history remains available. | Temporarily copy sensitive or irrelevant values without recording them in the app’s memory. |
+| `TypeyTypey.exe --resume` | Turns clipboard monitoring back on. | Resume collecting new text after a pause. |
+| `TypeyTypey.exe --clear-history` | Clears TypeyTypey’s in-memory history only. It does not clear the Windows clipboard. | Remove copied values from the picker immediately. |
+| `TypeyTypey.exe --exit` | Closes the running TypeyTypey instance cleanly. | End the background app from a script or shortcut. |
+
+If TypeyTypey is not already running, a command starts it, performs the requested action, and normally leaves it running. `--exit` is the exception: with no existing instance, it starts only long enough to exit cleanly.
 
 ## Building
 
