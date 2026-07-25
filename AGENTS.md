@@ -216,7 +216,67 @@ Do not commit `bin/`, `obj/`, or built executables.
 - Named-pipe ACL exposure — measured, then restricted to owner + LocalSystem. See `SECURITY.md`.
 - Bare `catch { }` around startup registration — now typed, reported, and reverted consistently.
 
-## 9. Escalate rather than decide
+## 9. Pending manual validation — v1.0.4
+
+**These block tagging v1.0.4.** Everything below is visual or requires a UAC prompt, so it cannot be
+automated and was not verified by the agent that implemented the change. Tick items off here as they
+are confirmed; delete this section once the release is tagged.
+
+The development machine used for v1.0.4 ran at 144 DPI (150%) with UAC disabled and a single admin
+account, which is why these specific gaps exist.
+
+### UAC and elevation — needs UAC enabled and a reboot
+
+With UAC off, an admin account has no split token, every process runs elevated, and no consent
+prompt can be raised. `EnableLUA` requires a **reboot** to take effect.
+
+- [ ] Non-elevated launch: tray tooltip reads `TypeyTypey`, no elevation line in Settings.
+- [ ] `TypeyTypey.exe --admin` raises UAC; accepting yields tooltip `TypeyTypey (Administrator)` and the elevation line at the bottom of Settings.
+- [ ] `--admin` again while elevated: balloon says it is already elevated, nothing restarts, still one process.
+- [ ] Declining the UAC prompt leaves TypeyTypey running unelevated with a cancellation message, and does not exit.
+- [ ] The **Run as administrator** checkbox still performs the same restart, and cancelling reverts the setting.
+
+### Display scaling
+
+Only 150% was measurable locally. Settings client is 615x700 logical.
+
+- [ ] 100%, 125% and 200%: all sections fit, Save and Type buttons reachable, status text visible, Theme control uncrowded.
+- [ ] Shrink below the minimum: the layout scrolls rather than clipping.
+- [ ] Saved position honoured on reopen; move to a second monitor, close, disconnect it, reopen — window lands somewhere visible.
+
+### Theme
+
+- [ ] Light and Dark applied to Settings and the picker: search box, history list, buttons, labels, check boxes, combo boxes, numeric controls, group-box labels and borders, status text.
+- [ ] Selected history entry and search selection are clearly visible in Dark. **`ListBox` selection uses the system highlight rather than a themed colour — most likely to disappoint.**
+- [ ] Keyboard focus indicators visible; disabled controls distinguishable; no white-on-white or dark-on-dark.
+- [ ] System default follows a live Windows light/dark switch with both windows reopened.
+- [ ] Preference survives restart. High contrast remains readable.
+- [ ] Tray context menu and About dialog readable in Dark.
+
+### Typing and existing behaviour
+
+- [ ] ASCII, punctuation, Unicode, and a long generated password into Notepad.
+- [ ] An RDP password prompt and an elevated target with administrator mode on.
+- [ ] Tray double-click and every tray menu item.
+- [ ] Picker keys: arrows, Enter, Escape, Delete, double-click; only one picker at a time.
+- [ ] History is empty after exit and restart.
+
+### Diagnostic harness
+
+Kept outside the repository at `D:\TheEdge\KingslayerTM\_tt_diag` (not version controlled):
+
+| Script | Purpose |
+|---|---|
+| `probe3.ps1` | Cold start, hotkey paths, Settings sizing, IPC, process survival |
+| `probe-elevation.ps1` | Confirms the elevation notice renders in Settings |
+| `pipe-acl3.ps1` | Reads the command pipe's DACL as SDDL |
+| `Diag.csproj` | Isolated WinForms handle-recreation and autoscaling experiments |
+
+Probes must set `PER_MONITOR_AWARE_V2` before any `GetWindowRect` call. PowerShell is DPI-unaware by
+default and Windows silently virtualises the results, which produced measurements off by exactly the
+scale factor during the v1.0.4 investigation.
+
+## 10. Escalate rather than decide
 
 Stop and ask the maintainer when a change would:
 
