@@ -92,3 +92,13 @@ public sealed class CommandLineTests
         Assert.True(elevatedRestart);
     }
 }
+
+public sealed class InputTyperTests
+{
+    [Fact]
+    public void NativeInputSize_MatchesTheWin32InputAbi()
+    {
+        int expectedSize = IntPtr.Size == 8 ? 40 : 28;
+        Assert.Equal(expectedSize, InputTyper.NativeInputSize);
+    }
+}
