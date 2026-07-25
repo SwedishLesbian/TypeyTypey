@@ -27,3 +27,9 @@ to anonymous logons with no purpose. The explicit DACL removes both.
 
 This does not defend against a process already running as the same user, which can interact with the
 application by design.
+
+**Known limitation, unverified.** If a standard user elevates TypeyTypey by entering a *different*
+administrator account's credentials at the UAC prompt, the elevated instance owns the pipe under
+that administrator's account, and command-line options run by the original user may no longer reach
+it. This has been reasoned from the access model rather than reproduced, and it appears to predate
+the v1.0.4 change: the previous Windows default also withheld write access from other users.

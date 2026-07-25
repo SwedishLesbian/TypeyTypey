@@ -16,10 +16,25 @@ A single-purpose Windows tray utility that types clipboard-derived text as simul
 keystrokes via Win32 `SendInput`, for targets that accept keyboard input but reject `Ctrl+V`
 (RDP, KVM/IPMI consoles, credential dialogs, legacy applications).
 
-~1,200 lines of C# across 15 files. .NET 8 / WinForms, published as a self-contained single-file
+~2,000 lines of C# across 19 files. .NET 8 / WinForms, published as a self-contained single-file
 `win-x64` executable. No dependency outside the BCL and xunit.
 
 See [README.md](README.md) for user-facing behavior and CLI surface.
+
+### Layout
+
+Source is grouped by responsibility. The namespace stays flat (`TypeyTypey`); the folders are for
+navigation, not for layering, and the `.csproj` needs no change when files move between them.
+
+| Folder | Holds |
+|---|---|
+| `App/` | Entry point and application lifetime — `Program`, `TrayApplicationContext`, `AppCommand` |
+| `Core/` | Non-visual state and services — settings, theme enum, history, version, single-instance |
+| `Ui/` | Windows and presentation — `SettingsForm`, `HistoryPicker`, `ThemeManager`, `WindowPlacement` |
+| `Windows/` | Win32 P/Invoke, one concern per file — hotkeys, input injection, clipboard, focus, privilege, startup |
+
+`Windows/` files use Win32 field names (`dx`, `wVk`, `dwFlags`) that intentionally violate .NET
+naming; `.editorconfig` suppresses IDE1006 for that folder rather than renaming the ABI.
 
 ## 2. Authority hierarchy
 
@@ -44,11 +59,11 @@ maintainer explicitly authorizes a change.
 1. **Clipboard contents never leave memory.** Never logged, persisted to disk, transmitted, or
    included in an error message, status string, or exception. History is memory-only and cleared
    on exit. Enforced by hand today — see the deliberately clipboard-safe messages in
-   `InputTyper.DescribeFailure` and the catch-all in `MainForm.StartTypingAsync`.
+   `InputTyper.DescribeFailure` and the catch-all in `TrayApplicationContext.StartTypingAsync`.
 2. **Keyboard simulation only — never clipboard paste.** The reason the application exists.
    Do not introduce a `Ctrl+V` fallback path.
 3. **Exactly one running instance,** preserved across the UAC elevation handoff
-   (`Program.cs`, `SingleInstanceManager`).
+   (`App/Program.cs`, `Core/SingleInstanceManager.cs`).
 4. **No network activity and no telemetry,** ever.
 5. **Scope ceiling.** Not a password manager, clipboard replacement, macro recorder, launcher, or
    plugin host. See CONTRIBUTING.md — feature requests crossing this line are declined, not
@@ -80,7 +95,9 @@ dotnet.exe publish 'D:\TheEdge\KingslayerTM\TypeyTypey\TypeyTypey.csproj' --conf
 ```
 
 Or `.\publish.ps1` from PowerShell on the Windows side. Expected output:
-`bin\Release\net8.0-windows\win-x64\publish\TypeyTypey.exe` (~72 MB, self-contained).
+`bin\TypeyTypey.exe` (~72 MB, self-contained). A post-publish target copies it there from the
+canonical `bin\Release\net8.0-windows\win-x64\publish\` directory, which is left in place so the
+CI artifact and release jobs are unaffected.
 
 ### Required validation before work is offered as ready
 
@@ -113,7 +130,9 @@ publish a release without being told to. Work stops in the local repository with
 
 ## 5. Testing
 
-`TypeyTypey.Tests/` — xunit, one file. The main project exposes internals via
+`TypeyTypey.Tests/` — xunit. `ClipboardHistoryTests.cs` covers history, CLI parsing and the INPUT
+ABI; `PolicyTests.cs` covers settings, theme, hotkey bindings, version and placement policy. The
+main project exposes internals via
 `InternalsVisibleTo("TypeyTypey.Tests")` in `Properties/AssemblyInfo.cs`, so internal types are
 directly testable without widening their visibility.
 
@@ -130,7 +149,7 @@ monitor-clamping policy. 68 tests as of v1.0.4.
 It exists because v1.0.2 fixed a bug where omitting the unused `MOUSEINPUT` union member made
 `Marshal.SizeOf<INPUT>()` report 32 bytes on x64 instead of Win32's required 40, causing every
 `SendInput` call to fail with `ERROR_INVALID_PARAMETER`. The apparently-dead `MOUSEINPUT` struct
-in `InputTyper.cs` **is** the fix. Do not remove it.
+in `Windows/InputTyper.cs` **is** the fix. Do not remove it.
 
 Tests must not claim to prove rendered layout or theme appearance. `WindowPlacementTests` pins the
 sizing *policy*; whether the result looks right at a given scaling factor is manual validation.
@@ -148,7 +167,8 @@ nothing. This was done for the v1.0.4 additions.
   deliberate at this size. Do not introduce architecture the file count does not justify.
 - **Types are `internal`** unless a test or the entry point requires otherwise.
 - **Comment the non-obvious Win32 constraint, not the code.** The existing comments in
-  `InputTyper.cs`, `HotkeyWindow.cs` and `SettingsForm`'s constructor are the model: they explain a
+  `Windows/InputTyper.cs`, `Windows/HotkeyWindow.cs` and `Ui/SettingsForm`'s constructor are the
+  model: they explain a
   platform behavior the code alone cannot convey. Match that density — sparse, and only where earned.
 - **UI is constructed in code,** not designer files. `SettingsForm.BuildLayout` is the pattern.
 
@@ -187,7 +207,8 @@ Do not commit `bin/`, `obj/`, or built executables.
 |---|---|---|
 | **Invariants in §3 unconfirmed** | Recorded from documentation, not maintainer approval. | Maintainer confirms, and `[CANDIDATE]` is removed. |
 | **Theme appearance unverified by automation** | Dark-mode contrast, focus indicators, selection colours and high-contrast behaviour can only be judged visually. `ListBox` selection uses the system highlight rather than a themed colour. | Maintainer confirms appearance per the v1.0.4 manual checklist; revisit owner-drawn selection only if the system highlight reads poorly on dark. |
-| **Non-elevated pipe DACL not separately measured** | The v1.0.4 DACL was verified from an elevated instance. The explicit `PipeSecurity` is applied identically either way, but the non-elevated default was not independently captured. | Re-run the DACL probe from a non-elevated shell if the question resurfaces. |
+| **Non-elevated pipe DACL not separately measured** | The v1.0.4 DACL was verified from an elevated instance. `WindowsIdentity.GetCurrent().User` returns the same SID either way, so the explicit `PipeSecurity` is elevation-independent by construction; only the *historical* v1.0.3 default claim is unmeasured for the non-elevated case. | Re-run `pipe-acl3.ps1` from a non-elevated shell if the question resurfaces. |
+| **Over-the-shoulder elevation may break the CLI relay — UNVERIFIED** | If a standard user elevates by entering a *different* admin account's credentials, the elevated instance owns the pipe under that admin's SID and the original user's `TypeyTypey.exe --history` cannot write to it. Reasoned, not reproduced. Appears **pre-existing**: the prior Windows default also granted Everyone read-only, so a cross-user write would have failed identically. Not a v1.0.4 regression. | Reproduce with a second local admin account, then either document the limitation in README or widen the DACL deliberately. Do not widen it without evidence. |
 
 ### Closed in v1.0.4
 

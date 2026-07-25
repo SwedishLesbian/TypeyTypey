@@ -54,7 +54,7 @@ To build from source, clone this repository, install the [.NET 8 SDK](https://do
 dotnet publish .\TypeyTypey.csproj -c Release -r win-x64 --self-contained true
 ```
 
-The executable is produced at `bin\Release\net8.0-windows\win-x64\publish\TypeyTypey.exe`.
+The executable is copied to `bin\TypeyTypey.exe` (also left in the canonical publish directory, `bin\Release\net8.0-windows\win-x64\publish\`).
 
 ## Usage
 

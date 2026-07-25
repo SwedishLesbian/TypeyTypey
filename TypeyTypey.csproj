@@ -32,4 +32,13 @@
   <ItemGroup>
     <Compile Remove="TypeyTypey.Tests/**/*.cs" />
   </ItemGroup>
+  <!-- Publishing buries the executable under bin\Release\<tfm>\<rid>\publish\. Copy it to a stable
+       bin\TypeyTypey.exe so it is easy to find and run. bin\ is already gitignored. The canonical
+       publish directory is left untouched, so the CI artifact and release jobs are unaffected. -->
+  <Target Name="CopyPublishedExecutableToBin" AfterTargets="Publish" Condition="'$(PublishSingleFile)' == 'true'">
+    <Copy SourceFiles="$(PublishDir)$(AssemblyName).exe"
+          DestinationFolder="$(MSBuildProjectDirectory)\bin\"
+          SkipUnchangedFiles="false" />
+    <Message Importance="high" Text="Executable: $(MSBuildProjectDirectory)\bin\$(AssemblyName).exe" />
+  </Target>
 </Project>
