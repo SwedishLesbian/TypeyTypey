@@ -2,6 +2,11 @@
 
 All notable changes to TypeyTypey are documented here.
 
+## 1.0.2 - 2026-07-25
+
+- Fixed the native `SendInput` ABI layout on 64-bit Windows, which could cause all simulated typing to fail with `ERROR_INVALID_PARAMETER`.
+- Added a regression test for the Win32 `INPUT` structure size and actionable, clipboard-safe typing failure messages.
+
 ## 1.0.1 - 2026-07-25
 
 - Added an opt-in **Run as administrator** setting that restarts the application through Windows UAC.

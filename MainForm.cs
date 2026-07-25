@@ -130,7 +130,7 @@ internal sealed class MainForm : Form
         root.Controls.Add(Section("Typing", NumberRow("Character delay", _characterDelay, "ms"), NumberRow("Initial delay", _initialDelay, "ms"), _clearClipboard));
         root.Controls.Add(Section("Clipboard", _monitoringEnabled, NumberRow("Maximum history entries", _maximumHistory), _clearHistory));
         root.Controls.Add(Section("Startup", _startWithWindows, _runAsAdministrator));
-        root.Controls.Add(Section("About", new Label { Text = "TypeyTypey v1.0.1\nTypes clipboard-derived text with native Unicode input. Clipboard history is memory-only.", AutoSize = true }));
+        root.Controls.Add(Section("About", new Label { Text = "TypeyTypey v1.0.2\nTypes clipboard-derived text with native Unicode input. Clipboard history is memory-only.", AutoSize = true }));
         var actions = new FlowLayoutPanel { AutoSize = true };
         actions.Controls.AddRange([_save, _typeNow]);
         root.Controls.Add(actions);
@@ -302,7 +302,12 @@ internal sealed class MainForm : Form
             _status.Text = "Typing complete";
         }
         catch (OperationCanceledException) { _status.Text = "Typing cancelled"; }
-        catch (Exception) { _status.Text = "Typing failed"; ShowSafeError("TypeyTypey could not send the keystrokes."); }
+        catch (InputInjectionException ex)
+        {
+            _status.Text = ex.WindowsErrorCode > 0 ? $"Typing failed (Windows error {ex.WindowsErrorCode})" : "Typing failed";
+            ShowSafeError(InputTyper.DescribeFailure(ex));
+        }
+        catch (Exception) { _status.Text = "Typing failed"; ShowSafeError("TypeyTypey encountered an unexpected error while sending keyboard input. No clipboard text was shown or recorded."); }
         finally { _typingCts.Dispose(); _typingCts = null; }
     }
 
@@ -316,7 +321,7 @@ internal sealed class MainForm : Form
         e.Cancel = true;
         HideToTray();
     }
-    private void ShowAbout() => MessageBox.Show("TypeyTypey v1.0.1\nA quiet native Windows typing utility.\n\nMIT License", "About TypeyTypey", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    private void ShowAbout() => MessageBox.Show("TypeyTypey v1.0.2\nA quiet native Windows typing utility.\n\nMIT License", "About TypeyTypey", MessageBoxButtons.OK, MessageBoxIcon.Information);
     private static void ShowSafeError(string message) => MessageBox.Show(message, "TypeyTypey", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
     private sealed class HotkeyControls : FlowLayoutPanel

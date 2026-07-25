@@ -1,6 +1,10 @@
-# TypeyTypey v1.0.1
+# TypeyTypey v1.0.2
 
 TypeyTypey is a tiny native Windows utility for typing clipboard-derived text into applications where paste is unavailable or unreliable. Copy a password, command, URL, or other text; focus the destination; then let TypeyTypey simulate Unicode keyboard input.
+
+## Fix in this release
+
+This release corrects the 64-bit Win32 `SendInput` structure layout. Previous builds could have Windows reject every simulated keyboard input with `ERROR_INVALID_PARAMETER`; v1.0.2 sends the full native `INPUT` structure and reports actionable Windows error details without exposing clipboard contents.
 
 ## Highlights
 
