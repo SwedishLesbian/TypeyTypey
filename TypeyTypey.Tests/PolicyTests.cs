@@ -187,6 +187,47 @@ public sealed class HotkeyBindingTests
     }
 }
 
+public sealed class AdminCommandTests
+{
+    [Fact]
+    public void AdminFlag_ParsesAsElevateCommand()
+    {
+        Assert.True(CommandLine.TryParse(["--admin"], out AppCommand command));
+        Assert.Equal(AppCommand.Elevate, command);
+    }
+
+    [Fact]
+    public void AdminFlag_IsCaseInsensitive()
+    {
+        Assert.True(CommandLine.TryParse(["--ADMIN"], out AppCommand command));
+        Assert.Equal(AppCommand.Elevate, command);
+    }
+
+    [Fact]
+    public void AdminFlag_CannotBeCombinedWithAnotherCommand()
+    {
+        Assert.False(CommandLine.TryParse(["--admin", "--history"], out _));
+    }
+
+    [Fact]
+    public void AdminFlag_SurvivesTheElevationRelayAsACommandName()
+    {
+        // The relay transmits the enum name over the pipe, so it must round-trip.
+        Assert.True(Enum.TryParse(AppCommand.Elevate.ToString(), ignoreCase: true, out AppCommand parsed));
+        Assert.Equal(AppCommand.Elevate, parsed);
+    }
+
+    [Fact]
+    public void ElevatedRestartMarker_IsDistinctFromTheAdminFlag()
+    {
+        Assert.NotEqual(CommandLine.AdminArgument, CommandLine.ElevatedRestartArgument);
+        Assert.True(CommandLine.TryParse([CommandLine.AdminArgument, CommandLine.ElevatedRestartArgument],
+            out AppCommand command, out bool elevatedRestart));
+        Assert.Equal(AppCommand.Elevate, command);
+        Assert.True(elevatedRestart);
+    }
+}
+
 public sealed class VersionInfoTests
 {
     [Theory]

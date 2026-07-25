@@ -8,7 +8,7 @@ internal static class Program
         string[] arguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
         if (!CommandLine.TryParse(arguments, out AppCommand command, out bool elevatedRestart))
         {
-            MessageBox.Show("Supported commands: --type, --history, --settings, --pause, --resume, --clear-history, --exit", "TypeyTypey", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Supported commands: --type, --history, --settings, --pause, --resume, --clear-history, --admin, --exit", "TypeyTypey", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 

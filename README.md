@@ -99,9 +99,12 @@ Run them from PowerShell in the folder containing the executable, for example:
 | `TypeyTypey.exe --pause` | Stops adding new clipboard values to TypeyTypey history. Existing history remains available. | Temporarily copy sensitive or irrelevant values without recording them in the app’s memory. |
 | `TypeyTypey.exe --resume` | Turns clipboard monitoring back on. | Resume collecting new text after a pause. |
 | `TypeyTypey.exe --clear-history` | Clears TypeyTypey’s in-memory history only. It does not clear the Windows clipboard. | Remove copied values from the picker immediately. |
+| `TypeyTypey.exe --admin` | Restarts TypeyTypey elevated through a standard UAC prompt. Affects this run only; the saved **Run as administrator** setting is unchanged. | Type into an elevated application once, without making elevation permanent. |
 | `TypeyTypey.exe --exit` | Closes the running TypeyTypey instance cleanly. | End the background app from a script or shortcut. |
 
 If TypeyTypey is not already running, a command starts it, performs the requested action, and normally leaves it running. `--exit` is the exception: with no existing instance, it starts only long enough to exit cleanly.
+
+`--admin` is handled by whichever instance owns the single-instance lock, so it works whether or not TypeyTypey is already running. If it is running, that instance elevates itself and restarts; declining the UAC prompt leaves it running normally. If it is already elevated, it says so and does nothing.
 
 ## Building
 

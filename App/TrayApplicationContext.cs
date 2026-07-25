@@ -89,12 +89,46 @@ internal sealed class TrayApplicationContext : ApplicationContext
             case AppCommand.Pause: SetMonitoring(false); break;
             case AppCommand.Resume: SetMonitoring(true); break;
             case AppCommand.ClearHistory: _history.Clear(); break;
+            case AppCommand.Elevate: RestartElevated(); break;
             case AppCommand.Exit: ExitApplication(); break;
         }
     }
 
     /// <summary>Marshals an IPC command onto the UI thread.</summary>
     public void PostCommand(AppCommand command) => _ui.Post(_ => ExecuteCommand(command), null);
+
+    /// <summary>
+    /// Elevates the running instance, as requested by <c>--admin</c>.
+    ///
+    /// The relay makes this work from a plain command line: whichever process owns the mutex
+    /// performs the restart, so an already-running instance elevates itself rather than a second
+    /// process racing it for single-instance ownership. This deliberately does not change the
+    /// persisted Run as administrator setting — <c>--admin</c> elevates this run only.
+    /// </summary>
+    private void RestartElevated()
+    {
+        if (PrivilegeManager.IsElevated())
+        {
+            ShowBalloon("TypeyTypey is already running as administrator.");
+            return;
+        }
+
+        // Drop --admin so the elevated instance does not re-enter this path and report back that it
+        // is already elevated.
+        string[] restartArguments = Environment.GetCommandLineArgs()
+            .Skip(1)
+            .Where(argument => !string.Equals(argument, CommandLine.AdminArgument, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (PrivilegeManager.TryRestartElevated(restartArguments))
+        {
+            ExitApplication();
+            return;
+        }
+
+        SetStatus("Administrator restart was cancelled");
+        ShowSafeError("Administrator restart was cancelled. TypeyTypey will continue without elevation.");
+    }
 
     private void OnHotkeyPressed(int id)
     {

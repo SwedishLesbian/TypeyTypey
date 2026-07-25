@@ -28,6 +28,8 @@ binary but did not produce the intended behaviour, so both are corrected here at
   company and copyright metadata.
 - Elevation is now visible: the tray tooltip reads **TypeyTypey (Administrator)** and the Settings
   window carries a confirming line at the bottom. Neither appears when running normally.
+- New `--admin` command line option restarts TypeyTypey elevated through UAC for that run, without
+  changing the persisted **Run as administrator** setting.
 
 ## 1.0.3 - 2026-07-25
 

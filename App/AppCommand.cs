@@ -9,12 +9,14 @@ internal enum AppCommand
     Pause,
     Resume,
     ClearHistory,
-    Exit
+    Exit,
+    Elevate
 }
 
 internal static class CommandLine
 {
     internal const string ElevatedRestartArgument = "--elevated-restart";
+    internal const string AdminArgument = "--admin";
 
     public static bool TryParse(string[] arguments, out AppCommand command)
     {
@@ -40,6 +42,7 @@ internal static class CommandLine
             "--resume" => AppCommand.Resume,
             "--clear-history" => AppCommand.ClearHistory,
             "--exit" => AppCommand.Exit,
+            AdminArgument => AppCommand.Elevate,
             _ => AppCommand.None
         };
         return visibleArguments.Length <= 1 && (visibleArguments.Length == 0 || command != AppCommand.None);
