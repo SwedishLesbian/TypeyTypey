@@ -209,8 +209,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
         SetStatus(enabled ? "Clipboard monitoring resumed" : "Clipboard monitoring paused");
     }
 
-    private void UpdateTrayText() =>
-        _trayIcon.Text = _settings.ClipboardMonitoringEnabled ? "TypeyTypey" : "TypeyTypey (Paused)";
+    /// <summary>
+    /// Tray tooltip doubles as the always-available elevation indicator, so the user can confirm
+    /// administrator mode took effect without opening Settings. NotifyIcon.Text caps at 63
+    /// characters; the longest form here is well inside that.
+    /// </summary>
+    private void UpdateTrayText()
+    {
+        var state = new List<string>(2);
+        if (!_settings.ClipboardMonitoringEnabled) state.Add("Paused");
+        if (PrivilegeManager.IsElevated()) state.Add("Administrator");
+        _trayIcon.Text = state.Count == 0 ? "TypeyTypey" : $"TypeyTypey ({string.Join(", ", state)})";
+    }
 
     public void ShowBalloon(string message) => _trayIcon.ShowBalloonTip(1500, "TypeyTypey", message, ToolTipIcon.Info);
 

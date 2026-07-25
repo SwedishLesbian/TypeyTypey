@@ -21,6 +21,7 @@ internal sealed class SettingsForm : Form
     private readonly Button _typeNow = new() { Text = "Type current clipboard", AutoSize = true };
     private readonly Button _clearHistory = new() { Text = "Clear history", AutoSize = true };
     private readonly Label _status = new() { AutoSize = true };
+    private readonly Label _elevationNotice = new() { AutoSize = true, Visible = false, Margin = new Padding(0, 6, 0, 0) };
 
     public SettingsForm(TrayApplicationContext context, Icon icon)
     {
@@ -96,6 +97,10 @@ internal sealed class SettingsForm : Form
     private void ApplyTheme(AppTheme theme)
     {
         ThemeManager.Apply(this, theme);
+        // Apply paints every label with the standard text colour, so the accent is restored after.
+        // High contrast keeps the user's own palette untouched.
+        if (_elevationNotice.Visible && !ThemeManager.ShouldUseSystemPalette)
+            _elevationNotice.ForeColor = ThemeManager.PaletteFor(ThemeManager.Resolve(theme)).Accent;
         Refresh();
     }
 
@@ -131,6 +136,15 @@ internal sealed class SettingsForm : Form
         actions.Controls.AddRange([_save, _typeNow]);
         root.Controls.Add(actions);
         root.Controls.Add(_status);
+
+        // Elevation is otherwise invisible, and it is the whole point of the administrator setting.
+        // Shown only when elevated, so the normal case stays uncluttered.
+        if (PrivilegeManager.IsElevated())
+        {
+            _elevationNotice.Text = "Running as administrator — can type into elevated applications.";
+            _elevationNotice.Visible = true;
+        }
+        root.Controls.Add(_elevationNotice);
         Controls.Add(root);
 
         foreach (ThemeChoice choice in ThemeChoice.All)

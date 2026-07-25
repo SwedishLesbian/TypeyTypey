@@ -26,6 +26,8 @@ binary but did not produce the intended behaviour, so both are corrected here at
   silently swallowed.
 - The displayed version is read from assembly metadata; the executable carries product, description,
   company and copyright metadata.
+- Elevation is now visible: the tray tooltip reads **TypeyTypey (Administrator)** and the Settings
+  window carries a confirming line at the bottom. Neither appears when running normally.
 
 ## 1.0.3 - 2026-07-25
 

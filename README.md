@@ -129,6 +129,8 @@ Windows does not let a non-elevated process send input to an elevated applicatio
 
 The **Run as administrator** setting requests a standard Windows UAC elevation and restarts TypeyTypey as the sole elevated instance. It is off by default; declining UAC leaves TypeyTypey running normally and turns the setting back off.
 
+When TypeyTypey is running elevated it says so in two places: the tray tooltip reads **TypeyTypey (Administrator)**, and a line at the bottom of the Settings window confirms it. Neither appears when running normally, so an unexpected absence means elevation did not take effect.
+
 ## Contributing
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes. The project intentionally stays small: reliability, native Windows behavior, privacy, and minimal dependencies outrank feature count.

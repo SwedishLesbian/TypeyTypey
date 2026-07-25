@@ -10,7 +10,8 @@ internal sealed record ThemePalette(
     Color Text,
     Color DisabledText,
     Color Border,
-    Color ButtonFace)
+    Color ButtonFace,
+    Color Accent)
 {
     public static ThemePalette Light { get; } = new(
         Window: SystemColors.Control,
@@ -18,7 +19,9 @@ internal sealed record ThemePalette(
         Text: SystemColors.ControlText,
         DisabledText: SystemColors.GrayText,
         Border: SystemColors.ControlDark,
-        ButtonFace: SystemColors.Control);
+        ButtonFace: SystemColors.Control,
+        // Amber reads as "elevated privilege" without the alarm of red.
+        Accent: Color.FromArgb(138, 88, 0));
 
     public static ThemePalette Dark { get; } = new(
         Window: Color.FromArgb(32, 32, 32),
@@ -26,7 +29,8 @@ internal sealed record ThemePalette(
         Text: Color.FromArgb(240, 240, 240),
         DisabledText: Color.FromArgb(154, 154, 154),
         Border: Color.FromArgb(82, 82, 82),
-        ButtonFace: Color.FromArgb(56, 56, 56));
+        ButtonFace: Color.FromArgb(56, 56, 56),
+        Accent: Color.FromArgb(232, 184, 96));
 }
 
 /// <summary>
