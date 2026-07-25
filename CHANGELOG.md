@@ -2,9 +2,10 @@
 
 All notable changes to TypeyTypey are documented here.
 
-## Unreleased
+## 1.0.3 - 2026-07-25
 
 - Keep the Clipboard History picker above the active application instead of owning it behind the settings window.
+- Increase the Settings window to a practical default size.
 
 ## 1.0.2 - 2026-07-25
 
