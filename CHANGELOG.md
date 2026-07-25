@@ -6,6 +6,7 @@ All notable changes to TypeyTypey are documented here.
 
 - Fixed the native `SendInput` ABI layout on 64-bit Windows, which could cause all simulated typing to fail with `ERROR_INVALID_PARAMETER`.
 - Added a regression test for the Win32 `INPUT` structure size and actionable, clipboard-safe typing failure messages.
+- Fixed Settings window height and width
 
 ## 1.0.1 - 2026-07-25
 
