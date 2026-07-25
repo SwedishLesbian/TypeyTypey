@@ -83,4 +83,12 @@ public sealed class CommandLineTests
         Assert.False(CommandLine.TryParse(["--nope"], out _));
         Assert.False(CommandLine.TryParse(["--type", "--history"], out _));
     }
+
+    [Fact]
+    public void Parse_RecognizesTheInternalElevationRestartMarker()
+    {
+        Assert.True(CommandLine.TryParse(["--history", CommandLine.ElevatedRestartArgument], out AppCommand command, out bool elevatedRestart));
+        Assert.Equal(AppCommand.History, command);
+        Assert.True(elevatedRestart);
+    }
 }

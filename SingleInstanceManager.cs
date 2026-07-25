@@ -17,8 +17,25 @@ internal sealed class SingleInstanceManager : IDisposable
         IsPrimaryInstance = createdNew;
     }
 
-    public bool IsPrimaryInstance { get; }
+    public bool IsPrimaryInstance { get; private set; }
     public event Action<AppCommand>? CommandReceived;
+
+    public bool WaitForPrimaryInstance(TimeSpan timeout)
+    {
+        if (IsPrimaryInstance)
+            return true;
+
+        try
+        {
+            IsPrimaryInstance = _mutex.WaitOne(timeout);
+            return IsPrimaryInstance;
+        }
+        catch (AbandonedMutexException)
+        {
+            IsPrimaryInstance = true;
+            return true;
+        }
+    }
 
     public static bool SendCommand(AppCommand command)
     {

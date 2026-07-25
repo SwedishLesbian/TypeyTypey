@@ -1,4 +1,4 @@
-# TypeyTypey v1.0
+# TypeyTypey v1.0.1
 
 TypeyTypey is a tiny native Windows utility for typing clipboard-derived text into applications where paste is unavailable or unreliable. Copy a password, command, URL, or other text; focus the destination; then let TypeyTypey simulate Unicode keyboard input.
 
@@ -8,6 +8,7 @@ TypeyTypey is a tiny native Windows utility for typing clipboard-derived text in
 - Native Unicode `SendInput` typing with configurable initial and per-character delays
 - Keyboard-first history picker, duplicate collapse, and configurable capacity
 - Quiet tray operation, single-instance protection, command-line relay, and optional Windows startup
+- Optional UAC-backed administrator restart for input into elevated applications
 - Self-contained single-file `win-x64` executable—no installer or .NET runtime required
 
 ## Privacy

@@ -13,6 +13,7 @@ internal sealed class MainForm : Form
     private readonly CheckBox _monitoringEnabled = new() { Text = "Enable clipboard monitoring", AutoSize = true };
     private readonly NumericUpDown _maximumHistory = new() { Minimum = 1, Maximum = 500, Width = 90 };
     private readonly CheckBox _startWithWindows = new() { Text = "Start with Windows", AutoSize = true };
+    private readonly CheckBox _runAsAdministrator = new() { Text = "Run as administrator (requests UAC approval)", AutoSize = true };
     private readonly Button _save = new() { Text = "Save settings", AutoSize = true };
     private readonly Button _typeNow = new() { Text = "Type current clipboard", AutoSize = true };
     private readonly Button _clearHistory = new() { Text = "Clear history", AutoSize = true };
@@ -128,8 +129,8 @@ internal sealed class MainForm : Form
         root.Controls.Add(Section("Hotkeys", _typeHotkey, _historyHotkey));
         root.Controls.Add(Section("Typing", NumberRow("Character delay", _characterDelay, "ms"), NumberRow("Initial delay", _initialDelay, "ms"), _clearClipboard));
         root.Controls.Add(Section("Clipboard", _monitoringEnabled, NumberRow("Maximum history entries", _maximumHistory), _clearHistory));
-        root.Controls.Add(Section("Startup", _startWithWindows));
-        root.Controls.Add(Section("About", new Label { Text = "TypeyTypey v1.0\nTypes clipboard-derived text with native Unicode input. Clipboard history is memory-only.", AutoSize = true }));
+        root.Controls.Add(Section("Startup", _startWithWindows, _runAsAdministrator));
+        root.Controls.Add(Section("About", new Label { Text = "TypeyTypey v1.0.1\nTypes clipboard-derived text with native Unicode input. Clipboard history is memory-only.", AutoSize = true }));
         var actions = new FlowLayoutPanel { AutoSize = true };
         actions.Controls.AddRange([_save, _typeNow]);
         root.Controls.Add(actions);
@@ -165,6 +166,7 @@ internal sealed class MainForm : Form
         _monitoringEnabled.Checked = _settings.ClipboardMonitoringEnabled;
         _maximumHistory.Value = _settings.MaximumHistoryEntries;
         _startWithWindows.Checked = _settings.StartWithWindows;
+        _runAsAdministrator.Checked = _settings.RunAsAdministrator;
     }
 
     private void SaveAndActivate(bool showBalloon = true)
@@ -196,6 +198,7 @@ internal sealed class MainForm : Form
             ClipboardMonitoringEnabled = _monitoringEnabled.Checked,
             MaximumHistoryEntries = (int)_maximumHistory.Value,
             StartWithWindows = _startWithWindows.Checked,
+            RunAsAdministrator = _runAsAdministrator.Checked,
             WindowLeft = Location.X,
             WindowTop = Location.Y
         };
@@ -204,6 +207,22 @@ internal sealed class MainForm : Form
         _history.SetMaximumEntries(_settings.MaximumHistoryEntries);
         if (_settings.ClipboardMonitoringEnabled) _clipboardMonitor.Start(); else _clipboardMonitor.Stop();
         _trayIcon.Text = _settings.ClipboardMonitoringEnabled ? "TypeyTypey" : "TypeyTypey (Paused)";
+        if (_settings.RunAsAdministrator && !PrivilegeManager.IsElevated())
+        {
+            if (PrivilegeManager.TryRestartElevated(Environment.GetCommandLineArgs().Skip(1)))
+            {
+                _allowClose = true;
+                Close();
+                return;
+            }
+
+            _settings.RunAsAdministrator = false;
+            _runAsAdministrator.Checked = false;
+            _settings.Save();
+            _status.Text = "Administrator restart was cancelled";
+            ShowSafeError("Administrator restart was cancelled. TypeyTypey will continue without elevation.");
+            return;
+        }
         _status.Text = $"Active: {type}; history: {history}";
         if (showBalloon) _trayIcon.ShowBalloonTip(1500, "TypeyTypey", "Settings saved.", ToolTipIcon.Info);
     }
@@ -297,7 +316,7 @@ internal sealed class MainForm : Form
         e.Cancel = true;
         HideToTray();
     }
-    private void ShowAbout() => MessageBox.Show("TypeyTypey v1.0\nA quiet native Windows typing utility.\n\nMIT License", "About TypeyTypey", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    private void ShowAbout() => MessageBox.Show("TypeyTypey v1.0.1\nA quiet native Windows typing utility.\n\nMIT License", "About TypeyTypey", MessageBoxButtons.OK, MessageBoxIcon.Information);
     private static void ShowSafeError(string message) => MessageBox.Show(message, "TypeyTypey", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
     private sealed class HotkeyControls : FlowLayoutPanel

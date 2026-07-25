@@ -14,9 +14,24 @@ internal enum AppCommand
 
 internal static class CommandLine
 {
+    internal const string ElevatedRestartArgument = "--elevated-restart";
+
     public static bool TryParse(string[] arguments, out AppCommand command)
     {
-        command = arguments.Length == 0 ? AppCommand.None : arguments[0].ToLowerInvariant() switch
+        return TryParse(arguments, out command, out _);
+    }
+
+    public static bool TryParse(string[] arguments, out AppCommand command, out bool elevatedRestart)
+    {
+        elevatedRestart = arguments.Count(argument => string.Equals(argument, ElevatedRestartArgument, StringComparison.OrdinalIgnoreCase)) == 1;
+        string[] visibleArguments = arguments.Where(argument => !string.Equals(argument, ElevatedRestartArgument, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (visibleArguments.Length + (elevatedRestart ? 1 : 0) != arguments.Length)
+        {
+            command = AppCommand.None;
+            return false;
+        }
+
+        command = visibleArguments.Length == 0 ? AppCommand.None : visibleArguments[0].ToLowerInvariant() switch
         {
             "--type" => AppCommand.Type,
             "--history" => AppCommand.History,
@@ -27,6 +42,6 @@ internal static class CommandLine
             "--exit" => AppCommand.Exit,
             _ => AppCommand.None
         };
-        return arguments.Length <= 1 && (arguments.Length == 0 || command != AppCommand.None);
+        return visibleArguments.Length <= 1 && (visibleArguments.Length == 0 || command != AppCommand.None);
     }
 }

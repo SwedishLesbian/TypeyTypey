@@ -12,6 +12,7 @@ internal sealed class AppSettings
     public bool ClipboardMonitoringEnabled { get; set; } = true;
     public int MaximumHistoryEntries { get; set; } = 50;
     public bool StartWithWindows { get; set; }
+    public bool RunAsAdministrator { get; set; }
     public int? WindowLeft { get; set; }
     public int? WindowTop { get; set; }
 

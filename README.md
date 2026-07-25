@@ -27,6 +27,7 @@ Perfect for:
 - Portable: no installer or administrator privileges required
 - Configurable hotkeys and 1–500 history entries
 - Memory-only clipboard history with duplicate collapse
+- Optional administrator-mode restart for typing into elevated applications
 
 ## Privacy
 
@@ -107,6 +108,8 @@ TypeyTypey types clipboard-derived contents exactly as simulated keyboard input.
 Use Bitwarden, KeePass, 1Password, or another dedicated secret manager to store credentials. TypeyTypey simply provides a dependable way to type a copied value into applications that reject paste.
 
 Windows does not let a non-elevated process send input to an elevated application. Run TypeyTypey at the same elevation as the target if required. Some secure desktop prompts intentionally block simulated input altogether.
+
+The **Run as administrator** setting requests a standard Windows UAC elevation and restarts TypeyTypey as the sole elevated instance. It is off by default; declining UAC leaves TypeyTypey running normally and turns the setting back off.
 
 ## Contributing
 
