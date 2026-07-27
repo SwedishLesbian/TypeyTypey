@@ -6,7 +6,12 @@ namespace TypeyTypey;
 
 internal static class PrivilegeManager
 {
-    public static bool IsElevated()
+    // A process cannot gain or lose elevation while running, so this is resolved once.
+    private static readonly Lazy<bool> ElevatedState = new(DetectElevation);
+
+    public static bool IsElevated() => ElevatedState.Value;
+
+    private static bool DetectElevation()
     {
         try
         {

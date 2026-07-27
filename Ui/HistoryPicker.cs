@@ -3,23 +3,33 @@ namespace TypeyTypey;
 internal sealed class HistoryPicker : Form
 {
     private readonly ClipboardHistory _history;
+    private readonly AppTheme _theme;
     private readonly TextBox _search = new() { Dock = DockStyle.Top, PlaceholderText = "Search clipboard history…" };
     private readonly ListBox _entries = new() { Dock = DockStyle.Fill, IntegralHeight = false, DisplayMember = nameof(HistoryEntry.Display) };
     private List<HistoryEntry> _filtered = [];
 
-    public HistoryPicker(ClipboardHistory history)
+    public HistoryPicker(ClipboardHistory history, AppTheme theme)
     {
         _history = history;
+        _theme = theme;
+
+        // The scale pass must be deferred to ResumeLayout; see the comment in SettingsForm. Without
+        // it the picker renders at 1/scale on a high-DPI display.
+        SuspendLayout();
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
+
         Text = "Clipboard History";
         FormBorderStyle = FormBorderStyle.FixedToolWindow;
         StartPosition = FormStartPosition.CenterScreen;
-        Size = new Size(640, 420);
+        ClientSize = WindowPlacement.DefaultPickerClientSize;
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = false;
         TopMost = true;
         Controls.Add(_entries);
         Controls.Add(_search);
+        ResumeLayout(performLayout: true);
 
         _search.TextChanged += (_, _) => RefreshEntries();
         _entries.DoubleClick += (_, _) => ChooseSelected();
@@ -29,10 +39,14 @@ internal sealed class HistoryPicker : Form
         Shown += (_, _) =>
         {
             RefreshEntries();
-            BringToFront();
+            // The picker opens from a global hotkey while another application owns the foreground,
+            // so an explicit foreground request is needed in addition to TopMost.
+            WindowFocus.ForceForeground(Handle);
             Activate();
             _search.Focus();
         };
+
+        ThemeManager.Apply(this, _theme);
     }
 
     public string? SelectedText { get; private set; }
@@ -42,6 +56,13 @@ internal sealed class HistoryPicker : Form
         if (disposing)
             _history.Changed -= OnHistoryChanged;
         base.Dispose(disposing);
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        if (m.Msg == ThemeManager.WmSettingChange && _theme == AppTheme.System)
+            ThemeManager.Apply(this, _theme);
     }
 
     private void OnHistoryChanged(object? sender, EventArgs e)
@@ -91,8 +112,9 @@ internal sealed class HistoryPicker : Form
         }
         else if (e.KeyCode == Keys.Delete && _entries.SelectedItem is HistoryEntry entry)
         {
-            _history.Remove(entry.Text);
             e.Handled = true;
+            if (ConfirmRemoval())
+                _history.Remove(entry.Text);
         }
         else if (e.KeyCode == Keys.Escape)
         {
@@ -100,6 +122,20 @@ internal sealed class HistoryPicker : Form
             Close();
         }
     }
+
+    /// <summary>
+    /// Delete is one keystroke away from the arrow keys used to browse, and history is memory-only
+    /// with nothing to undo it, so removal is confirmed. The prompt names no entry: clipboard-derived
+    /// text never appears in a dialog.
+    /// </summary>
+    private bool ConfirmRemoval() =>
+        MessageBox.Show(
+            this,
+            "Remove the selected entry from the clipboard history?\n\nThis cannot be undone.",
+            "TypeyTypey",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) == DialogResult.Yes;
 
     private void ChooseSelected()
     {

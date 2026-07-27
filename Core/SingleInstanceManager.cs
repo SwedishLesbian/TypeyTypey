@@ -1,5 +1,7 @@
 using System.Threading;
 using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 
 namespace TypeyTypey;
 
@@ -51,6 +53,34 @@ internal sealed class SingleInstanceManager : IDisposable
         catch (TimeoutException) { return false; }
     }
 
+    /// <summary>
+    /// Creates the command pipe with an explicit DACL granting only the current user and
+    /// LocalSystem.
+    ///
+    /// The Windows default measured on v1.0.3 was
+    /// <c>D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;BA)(A;;FR;;;WD)(A;;FR;;;AN)</c>: read access for
+    /// Everyone and for ANONYMOUS LOGON. That did not permit another user to send commands, because
+    /// the server is inbound and sending requires write access, but it did let any local process
+    /// open the single pipe instance and it extended reach to anonymous logons for no reason. This
+    /// application relays a command that types clipboard contents, so the pipe is scoped to its
+    /// owner instead of relying on that default.
+    /// </summary>
+    private static NamedPipeServerStream CreateRestrictedPipe()
+    {
+        var security = new PipeSecurity();
+        using WindowsIdentity identity = WindowsIdentity.GetCurrent();
+
+        SecurityIdentifier owner = identity.User ?? new SecurityIdentifier(WellKnownSidType.WorldSid, null);
+        security.AddAccessRule(new PipeAccessRule(owner, PipeAccessRights.FullControl, AccessControlType.Allow));
+        security.AddAccessRule(new PipeAccessRule(
+            new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+            PipeAccessRights.FullControl, AccessControlType.Allow));
+
+        return NamedPipeServerStreamAcl.Create(
+            PipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
+            inBufferSize: 0, outBufferSize: 0, security);
+    }
+
     public void Listen()
     {
         if (!IsPrimaryInstance || _listener is not null)
@@ -65,7 +95,7 @@ internal sealed class SingleInstanceManager : IDisposable
         {
             try
             {
-                using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                using NamedPipeServerStream pipe = CreateRestrictedPipe();
                 await pipe.WaitForConnectionAsync(_cancellation.Token);
                 using var reader = new StreamReader(pipe);
                 string? raw = await reader.ReadLineAsync(_cancellation.Token);

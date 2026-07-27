@@ -21,13 +21,16 @@ Perfect for:
 - Searchable, keyboard-first clipboard-history picker
 - Native Unicode typing via Windows `SendInput`—never clipboard paste
 - Configurable initial and per-character delays
+- Light, Dark, or System-default theme, applied without restarting
 - Quiet notification-area application with standard Windows controls
+- Correct rendering at any Windows display scaling
 - Single-instance operation; CLI commands communicate with the running instance
 - Self-contained, single-file `win-x64` executable
 - Portable: no installer or administrator privileges required
 - Configurable hotkeys and 1–500 history entries
 - Memory-only clipboard history with duplicate collapse
-- Optional administrator-mode restart for typing into elevated applications
+- History selection that arms the next hotkey press instead of typing immediately
+- Optional administrator-mode restart, or a scheduled task that starts elevated at sign-in
 
 ## Privacy
 
@@ -52,7 +55,7 @@ To build from source, clone this repository, install the [.NET 8 SDK](https://do
 dotnet publish .\TypeyTypey.csproj -c Release -r win-x64 --self-contained true
 ```
 
-The executable is produced at `bin\Release\net8.0-windows\win-x64\publish\TypeyTypey.exe`.
+The executable is copied to `bin\TypeyTypey.exe` (also left in the canonical publish directory, `bin\Release\net8.0-windows\win-x64\publish\`).
 
 ## Usage
 
@@ -71,13 +74,15 @@ The executable is produced at `bin\Release\net8.0-windows\win-x64\publish\TypeyT
 
 **Type current clipboard** reads the clipboard at the moment the shortcut is pressed, waits for the modifier keys to be released, then types the text into the window you had focused. This is the normal path for a password field, console, or legacy application that accepts keystrokes but rejects paste.
 
-**Clipboard history** opens a searchable picker of text copied since TypeyTypey started. Type to filter, use arrow keys to navigate, press Enter to select, Escape to close, or Delete to remove the selected item. The picker closes before typing begins and TypeyTypey restores the captured destination window.
+**Clipboard history** opens a searchable picker of text copied since TypeyTypey started. Type to filter, use arrow keys to navigate, press Enter (or double-click) to select, Escape to close, or Delete to remove the selected entry after confirming.
+
+Selecting an entry does not type it. It makes that entry what `Ctrl+Alt+V` will type, and a notification confirms the choice by length — never by showing the text. Pick the entry, click the destination field, then press `Ctrl+Alt+V`. The selection stays active so it can be typed into several fields, until you copy something new, delete it from the history, or clear the history — after which `Ctrl+Alt+V` returns to typing the current clipboard.
 
 ### Tray and settings
 
-Double-click the tray icon to open clipboard history. Its menu also offers typing, pause/resume monitoring, clearing history, settings, About, and Exit. Closing the settings window minimizes it to the tray; use **Exit** to end the application and clear its in-memory history.
+TypeyTypey runs in the notification area from the moment it starts; it does not open a window on launch. Double-click the tray icon to open clipboard history. Its menu also offers typing, pause/resume monitoring, clearing history, settings, About, and Exit. Closing the Settings window simply closes it — hotkeys, monitoring and the tray icon are unaffected. Use **Exit** to end the application and clear its in-memory history.
 
-Settings let you change both hotkeys, typing delays, history size, monitoring, startup behavior, and the optional **Run as administrator** mode. Defaults are 15 ms per character, a 500 ms initial delay, and 50 history entries. Use a longer delay when a remote or legacy application drops characters.
+Settings let you change both hotkeys, typing delays, history size, monitoring, theme, startup behavior, and the optional **Run as administrator** mode. Defaults are 15 ms per character, a 500 ms initial delay, 50 history entries, and the **System default** theme, which follows the Windows light/dark app setting. Use a longer delay when a remote or legacy application drops characters.
 
 ### Command line
 
@@ -97,9 +102,25 @@ Run them from PowerShell in the folder containing the executable, for example:
 | `TypeyTypey.exe --pause` | Stops adding new clipboard values to TypeyTypey history. Existing history remains available. | Temporarily copy sensitive or irrelevant values without recording them in the app’s memory. |
 | `TypeyTypey.exe --resume` | Turns clipboard monitoring back on. | Resume collecting new text after a pause. |
 | `TypeyTypey.exe --clear-history` | Clears TypeyTypey’s in-memory history only. It does not clear the Windows clipboard. | Remove copied values from the picker immediately. |
+| `TypeyTypey.exe --admin` | Restarts TypeyTypey elevated through a standard UAC prompt. Affects this run only; the saved **Run as administrator** setting is unchanged. | Type into an elevated application once, without making elevation permanent. |
+| `TypeyTypey.exe --admintask` | Creates a Windows scheduled task that starts TypeyTypey with administrator rights when you sign in — with no UAC prompt. Prompts for elevation once, to create the task. | Type into elevated applications every day without approving UAC at each start. |
+| `TypeyTypey.exe --admintask system` | Creates the task to run at boot as the SYSTEM account instead. | Rarely useful — see the warning below. |
+| `TypeyTypey.exe --admintask off` | Removes the scheduled task. | Undo either of the above. |
 | `TypeyTypey.exe --exit` | Closes the running TypeyTypey instance cleanly. | End the background app from a script or shortcut. |
 
 If TypeyTypey is not already running, a command starts it, performs the requested action, and normally leaves it running. `--exit` is the exception: with no existing instance, it starts only long enough to exit cleanly.
+
+`--admin` is handled by whichever instance owns the single-instance lock, so it works whether or not TypeyTypey is already running. If it is running, that instance elevates itself and restarts; declining the UAC prompt leaves it running normally. If it is already elevated, it says so and does nothing.
+
+### Starting elevated automatically
+
+`--admintask` is the exception to the rule above: it does not talk to the running instance. It registers a Windows scheduled task named **TypeyTypey**, raising one UAC prompt to do so, then exits. Any instance already running is left alone.
+
+The default task starts TypeyTypey at sign-in, as your own account, with the highest privileges available — the equivalent of always answering yes to UAC, but only for TypeyTypey. It is created for whichever account runs the command, so run it from the account that will use it. Because the task replaces the ordinary startup entry, `--admintask` also turns **Start with Windows** off; otherwise two copies would start and the second would simply open Settings.
+
+`--admintask system` instead runs TypeyTypey at boot under the SYSTEM account. **SYSTEM starts in session 0, which has no desktop**: the tray icon does not appear, the hotkeys do not reach your session, and typing cannot be delivered to your applications. It exists for the specific case where something else drives TypeyTypey in that context; it is not a way to start TypeyTypey for daily use.
+
+Both forms are removed with `--admintask off`. Neither changes the **Run as administrator** setting, which remains the way to elevate a session on demand.
 
 ## Building
 
@@ -126,6 +147,8 @@ Use Bitwarden, KeePass, 1Password, or another dedicated secret manager to store 
 Windows does not let a non-elevated process send input to an elevated application. Run TypeyTypey at the same elevation as the target if required. Some secure desktop prompts intentionally block simulated input altogether.
 
 The **Run as administrator** setting requests a standard Windows UAC elevation and restarts TypeyTypey as the sole elevated instance. It is off by default; declining UAC leaves TypeyTypey running normally and turns the setting back off.
+
+When TypeyTypey is running elevated it says so in two places: the tray tooltip reads **TypeyTypey (Administrator)**, and a line at the bottom of the Settings window confirms it. Neither appears when running normally, so an unexpected absence means elevation did not take effect.
 
 ## Contributing
 
