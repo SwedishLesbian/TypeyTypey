@@ -17,10 +17,10 @@
          Explorer and Task Manager show; Product, Company and Copyright map directly. -->
     <AssemblyTitle>Types clipboard text as simulated keyboard input</AssemblyTitle>
     <Product>TypeyTypey</Product>
-    <Company>SwedishLesbian</Company>
-    <Copyright>Copyright © 2026 SwedishLesbian</Copyright>
+    <Company>Larry Petersen</Company>
+    <Copyright>Copyright © 2026 Larry Petersen</Copyright>
     <Description>Types clipboard text as simulated keyboard input.</Description>
-    <Authors>SwedishLesbian</Authors>
+    <Authors>Larry Petersen</Authors>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
