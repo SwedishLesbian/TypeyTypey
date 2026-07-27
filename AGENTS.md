@@ -165,7 +165,7 @@ Covered: `ClipboardHistory` ordering/dedup/trim/clear, `CommandLine` parsing, th
 size, `AppSettings.Normalize` clamps, theme persistence and settings-file compatibility,
 `HotkeyBinding` validity and equality, version formatting, and `WindowPlacement` sizing and
 monitor-clamping policy, `--admintask` parsing, scheduled-task XML and picker selection rules.
-91 tests as of v1.0.4.
+96 tests as of v1.0.4.
 
 **`InputTyperTests.NativeInputSize_MatchesTheWin32InputAbi` is a load-bearing regression test.**
 It exists because v1.0.2 fixed a bug where omitting the unused `MOUSEINPUT` union member made
