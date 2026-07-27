@@ -279,12 +279,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 try
                 {
                     if (Clipboard.ContainsText())
-                    {
-                        // Copying new text is a more recent instruction than the picker selection,
-                        // so it takes the type hotkey back to the live clipboard.
-                        _pending.Clear();
                         _history.Add(Clipboard.GetText(TextDataFormat.UnicodeText));
-                    }
                     return;
                 }
                 catch (ExternalException) when (attempt < 2)
@@ -297,21 +292,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
         finally { _monitorReadPending = false; }
     }
 
-    private string? ReadClipboardText()
+    /// <summary>
+    /// Reads the clipboard without reporting anything. <c>Read</c> distinguishes "the clipboard holds
+    /// no text" from "the clipboard could not be read at all", which decide different things: an
+    /// unreadable clipboard must not be taken as evidence that the user copied something.
+    /// </summary>
+    private (bool Read, string? Text) ReadClipboard()
     {
         try
         {
-            if (!Clipboard.ContainsText())
-            {
-                SetStatus("Clipboard has no text");
-                return null;
-            }
-            return Clipboard.GetText(TextDataFormat.UnicodeText);
+            return (true, Clipboard.ContainsText() ? Clipboard.GetText(TextDataFormat.UnicodeText) : null);
         }
         catch (ExternalException)
         {
-            SetStatus("Clipboard is temporarily busy");
-            return null;
+            return (false, null);
         }
     }
 
@@ -346,7 +340,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// </summary>
     private void ArmSelection(string? text)
     {
-        if (!_pending.Set(text))
+        (bool read, string? clipboard) = ReadClipboard();
+        if (!_pending.Set(text, read, clipboard))
             return;
 
         string message = PendingSelection.Describe(_pending.Length, _settings.TypeClipboardHotkey.ToString());
@@ -357,14 +352,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
     // ---------- typing ----------
 
     /// <summary>
-    /// Types the picked history entry when one is armed, otherwise the current clipboard. The armed
-    /// entry survives typing, so the same value can be sent to several fields.
+    /// Types the picked history entry when one is armed and the clipboard has not changed since,
+    /// otherwise the current clipboard. The armed entry survives typing, so the same value can be
+    /// sent to several fields.
     /// </summary>
     public async Task TypeCurrentClipboardAsync()
     {
-        string? text = _pending.Resolve(ReadClipboardText);
-        if (text is not null)
-            await StartTypingAsync(text, WindowFocus.GetForegroundWindow());
+        (bool read, string? clipboard) = ReadClipboard();
+        string? text = _pending.Resolve(read, clipboard);
+        if (text is null)
+        {
+            SetStatus(read ? "Clipboard has no text" : "Clipboard is temporarily busy");
+            return;
+        }
+
+        await StartTypingAsync(text, WindowFocus.GetForegroundWindow());
     }
 
     private async Task StartTypingAsync(string text, IntPtr destination)

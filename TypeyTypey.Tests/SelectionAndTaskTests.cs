@@ -123,62 +123,109 @@ public sealed class ScheduledTaskXmlTests
 
 public sealed class PendingSelectionTests
 {
+    private const string Clipboard = "clipboard";
+
     [Fact]
     public void NothingArmed_TypesTheLiveClipboard()
     {
         var pending = new PendingSelection();
 
         Assert.False(pending.IsArmed);
-        Assert.Equal("clipboard", pending.Resolve(() => "clipboard"));
+        Assert.Equal(Clipboard, pending.Resolve(clipboardRead: true, Clipboard));
     }
 
     [Fact]
-    public void ArmedEntry_ReplacesTheClipboardWithoutReadingIt()
+    public void ArmedEntry_ReplacesTheClipboardItWasArmedAgainst()
     {
         var pending = new PendingSelection();
-        bool clipboardRead = false;
 
-        Assert.True(pending.Set("picked"));
-        Assert.Equal("picked", pending.Resolve(() => { clipboardRead = true; return "clipboard"; }));
-        Assert.False(clipboardRead);
+        Assert.True(pending.Set("picked", clipboardRead: true, Clipboard));
+        Assert.Equal("picked", pending.Resolve(clipboardRead: true, Clipboard));
     }
 
     [Fact]
     public void ArmedEntry_SurvivesRepeatedTyping()
     {
         var pending = new PendingSelection();
-        pending.Set("picked");
+        pending.Set("picked", clipboardRead: true, Clipboard);
 
-        Assert.Equal("picked", pending.Resolve(() => "clipboard"));
-        Assert.Equal("picked", pending.Resolve(() => "clipboard"));
+        Assert.Equal("picked", pending.Resolve(clipboardRead: true, Clipboard));
+        Assert.Equal("picked", pending.Resolve(clipboardRead: true, Clipboard));
+    }
+
+    [Fact]
+    public void CopyingSinceArming_SupersedesTheEntry()
+    {
+        // The case that matters with clipboard monitoring paused: nothing tells the application a
+        // copy happened, so the comparison against the clipboard at arming time has to catch it.
+        var pending = new PendingSelection();
+        pending.Set("picked", clipboardRead: true, Clipboard);
+
+        Assert.Equal("copied in the browser", pending.Resolve(clipboardRead: true, "copied in the browser"));
+        Assert.False(pending.IsArmed);
+        // And stays superseded: the entry is not resurrected by the clipboard changing again.
+        Assert.Equal(Clipboard, pending.Resolve(clipboardRead: true, Clipboard));
+    }
+
+    [Fact]
+    public void ClearingTheClipboardSinceArming_AlsoSupersedesTheEntry()
+    {
+        var pending = new PendingSelection();
+        pending.Set("picked", clipboardRead: true, Clipboard);
+
+        Assert.Null(pending.Resolve(clipboardRead: true, null));
+        Assert.False(pending.IsArmed);
+    }
+
+    [Fact]
+    public void UnreadableClipboard_KeepsTheArmedEntry()
+    {
+        // A clipboard another application is holding open proves nothing about what the user copied.
+        var pending = new PendingSelection();
+        pending.Set("picked", clipboardRead: true, Clipboard);
+
+        Assert.Equal("picked", pending.Resolve(clipboardRead: false, null));
+        Assert.True(pending.IsArmed);
+    }
+
+    [Fact]
+    public void EntryArmedAgainstAnUnreadableClipboard_IsNeverSuperseded()
+    {
+        // No snapshot was taken, so there is nothing to compare against; keeping the entry is the
+        // conservative choice, and the history-change and explicit paths still clear it.
+        var pending = new PendingSelection();
+        pending.Set("picked", clipboardRead: false, null);
+
+        Assert.Equal("picked", pending.Resolve(clipboardRead: true, "copied in the browser"));
+        Assert.True(pending.IsArmed);
     }
 
     [Fact]
     public void EmptyOrWhitespaceSelection_ArmsNothingAndClearsWhatWasArmed()
     {
         var pending = new PendingSelection();
-        pending.Set("picked");
+        pending.Set("picked", clipboardRead: true, Clipboard);
 
-        Assert.False(pending.Set("  \r\n "));
+        Assert.False(pending.Set("  \r\n ", clipboardRead: true, Clipboard));
         Assert.False(pending.IsArmed);
-        Assert.Equal("clipboard", pending.Resolve(() => "clipboard"));
+        Assert.Equal(Clipboard, pending.Resolve(clipboardRead: true, Clipboard));
     }
 
     [Fact]
     public void ClearedSelection_FallsBackToTheClipboard()
     {
         var pending = new PendingSelection();
-        pending.Set("picked");
+        pending.Set("picked", clipboardRead: true, Clipboard);
         pending.Clear();
 
-        Assert.Equal("clipboard", pending.Resolve(() => "clipboard"));
+        Assert.Equal(Clipboard, pending.Resolve(clipboardRead: true, Clipboard));
     }
 
     [Fact]
     public void SelectionIsDroppedOnceItLeavesTheHistory()
     {
         var pending = new PendingSelection();
-        pending.Set("picked");
+        pending.Set("picked", clipboardRead: true, Clipboard);
 
         Assert.False(pending.ClearIfMissingFrom(["other", "picked"]));
         Assert.True(pending.IsArmed);
@@ -192,7 +239,7 @@ public sealed class PendingSelectionTests
     public void Confirmation_ReportsTheLengthAndHotkeyButNeverTheText()
     {
         var pending = new PendingSelection();
-        pending.Set("hunter2");
+        pending.Set("hunter2", clipboardRead: true, Clipboard);
 
         string message = PendingSelection.Describe(pending.Length, "Ctrl + Alt + V");
 

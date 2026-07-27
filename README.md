@@ -76,7 +76,7 @@ The executable is copied to `bin\TypeyTypey.exe` (also left in the canonical pub
 
 **Clipboard history** opens a searchable picker of text copied since TypeyTypey started. Type to filter, use arrow keys to navigate, press Enter (or double-click) to select, Escape to close, or Delete to remove the selected entry after confirming.
 
-Selecting an entry does not type it. It makes that entry what `Ctrl+Alt+V` will type, and a notification confirms the choice by length — never by showing the text. Pick the entry, click the destination field, then press `Ctrl+Alt+V`. The selection stays active so it can be typed into several fields, until you copy something new, delete it from the history, or clear the history — after which `Ctrl+Alt+V` returns to typing the current clipboard.
+Selecting an entry does not type it. It makes that entry what `Ctrl+Alt+V` will type, and a notification confirms the choice by length — never by showing the text. Pick the entry, click the destination field, then press `Ctrl+Alt+V`. The selection stays active so it can be typed into several fields, until you copy something new, delete it from the history, or clear the history — after which `Ctrl+Alt+V` returns to typing the current clipboard. Copying wins even while clipboard monitoring is paused: TypeyTypey compares the clipboard against what it held when you picked, rather than relying on having watched it change.
 
 ### Tray and settings
 
