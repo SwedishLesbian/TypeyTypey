@@ -112,8 +112,9 @@ internal sealed class HistoryPicker : Form
         }
         else if (e.KeyCode == Keys.Delete && _entries.SelectedItem is HistoryEntry entry)
         {
-            _history.Remove(entry.Text);
             e.Handled = true;
+            if (ConfirmRemoval())
+                _history.Remove(entry.Text);
         }
         else if (e.KeyCode == Keys.Escape)
         {
@@ -121,6 +122,20 @@ internal sealed class HistoryPicker : Form
             Close();
         }
     }
+
+    /// <summary>
+    /// Delete is one keystroke away from the arrow keys used to browse, and history is memory-only
+    /// with nothing to undo it, so removal is confirmed. The prompt names no entry: clipboard-derived
+    /// text never appears in a dialog.
+    /// </summary>
+    private bool ConfirmRemoval() =>
+        MessageBox.Show(
+            this,
+            "Remove the selected entry from the clipboard history?\n\nThis cannot be undone.",
+            "TypeyTypey",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) == DialogResult.Yes;
 
     private void ChooseSelected()
     {
