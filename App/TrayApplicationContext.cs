@@ -55,7 +55,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _menu.Items.Add("Clear Clipboard History", null, (_, _) => _history.Clear());
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add("Settings…", null, (_, _) => ShowSettings());
-        _menu.Items.Add("About", null, (_, _) => ShowAbout());
+        _menu.Items.Add("Help…", null, (_, _) => ShowHelp());
+        _menu.Items.Add("About TypeyTypey", null, (_, _) => ShowAbout());
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add("Exit", null, (_, _) => ExitApplication());
         _menu.Opening += (_, _) =>
@@ -137,9 +138,28 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void OnHotkeyPressed(int id)
     {
         if (id == HotkeyManager.TypeClipboardHotkeyId)
-            _ = TypeCurrentClipboardAsync();
+            _ = TypeCurrentClipboardAsync(_settings.TypeClipboardHotkey.ToModifiers());
         else if (id == HotkeyManager.HistoryHotkeyId)
             ShowHistoryPicker();
+        else if (id == HotkeyManager.StopTypingHotkeyId)
+            CancelTyping();
+    }
+
+    /// <summary>
+    /// Stops a typing run. This is reachable mid-run because <see cref="InputTyper.TypeTextAsync"/>
+    /// always yields between characters, so the message loop keeps pumping and WM_HOTKEY still
+    /// arrives while typing is under way.
+    /// </summary>
+    public void CancelTyping()
+    {
+        if (_typingCts is null)
+        {
+            SetStatus("Nothing is being typed");
+            return;
+        }
+
+        _typingCts.Cancel();
+        ShowBalloon("Typing stopped.");
     }
 
     // ---------- settings ----------
@@ -167,12 +187,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     public bool ApplySettings(AppSettings updated, out string? error)
     {
         updated.Normalize();
-        if (!updated.TypeClipboardHotkey.IsValid || !updated.HistoryHotkey.IsValid ||
-            updated.TypeClipboardHotkey.IsSameAs(updated.HistoryHotkey))
-        {
-            error = "Choose two different hotkeys, each with at least one modifier key.";
+        error = updated.ValidateHotkeys();
+        if (error is not null)
             return false;
-        }
 
         AppSettings previous = _settings;
         _settings = updated;
@@ -180,7 +197,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             _settings = previous;
             ApplyHotkeys(reportFailure: false);
-            error = "Windows could not register one of those hotkeys. Another application may already be using it.";
+            error = "Windows could not register one of those hotkeys. Another application may already be using it. The previous hotkeys are still in effect.";
             return false;
         }
 
@@ -189,7 +206,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         ApplyMonitoringState();
         UpdateTrayText();
         _settings.Save();
-        SetStatus($"Active: {_settings.TypeClipboardHotkey}; history: {_settings.HistoryHotkey}");
+        SetStatus($"Type: {_settings.TypeClipboardHotkey}; history: {_settings.HistoryHotkey}; stop: {_settings.StopTypingHotkey}");
         return true;
     }
 
@@ -220,7 +237,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _hotkeys.UnregisterAll();
         bool type = _hotkeys.Register(HotkeyManager.TypeClipboardHotkeyId, _settings.TypeClipboardHotkey);
         bool history = _hotkeys.Register(HotkeyManager.HistoryHotkeyId, _settings.HistoryHotkey);
-        if (type && history)
+        bool stop = _hotkeys.Register(HotkeyManager.StopTypingHotkeyId, _settings.StopTypingHotkey);
+        if (type && history && stop)
             return true;
 
         _hotkeys.UnregisterAll();
@@ -262,9 +280,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     public void ShowBalloon(string message) => _trayIcon.ShowBalloonTip(1500, "TypeyTypey", message, ToolTipIcon.Info);
 
-    private void ShowAbout() => MessageBox.Show(
-        $"TypeyTypey v{VersionInfo.Display}\nA quiet native Windows typing utility.\n\nMIT License",
-        "About TypeyTypey", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    public void ShowHelp() => InfoDialog.ShowHelp(_settingsForm, _settings, _icon);
+
+    private void ShowAbout() => InfoDialog.ShowAbout(_settingsForm, _settings.Theme, _icon);
 
     // ---------- clipboard ----------
 
@@ -356,7 +374,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// otherwise the current clipboard. The armed entry survives typing, so the same value can be
     /// sent to several fields.
     /// </summary>
-    public async Task TypeCurrentClipboardAsync()
+    /// <param name="triggeringModifiers">
+    /// The modifiers of the hotkey that started this, or None when it came from the tray menu, the
+    /// Settings button or the command line. Those keys are explicitly released before typing.
+    /// </param>
+    public async Task TypeCurrentClipboardAsync(HotkeyModifiers triggeringModifiers = HotkeyModifiers.None)
     {
         (bool read, string? clipboard) = ReadClipboard();
         string? text = _pending.Resolve(read, clipboard);
@@ -366,10 +388,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        await StartTypingAsync(text, WindowFocus.GetForegroundWindow());
+        await StartTypingAsync(text, WindowFocus.GetForegroundWindow(), triggeringModifiers);
     }
 
-    private async Task StartTypingAsync(string text, IntPtr destination)
+    /// <summary>
+    /// How long to wait for the user to let go of the hotkey before giving up. Previously this wait
+    /// was unbounded, so a stuck modifier hung the typing operation with no feedback.
+    /// </summary>
+    private static readonly TimeSpan ModifierReleaseTimeout = TimeSpan.FromSeconds(5);
+
+    private async Task StartTypingAsync(string text, IntPtr destination, HotkeyModifiers triggeringModifiers)
     {
         if (_typingCts is not null || string.IsNullOrEmpty(text))
             return;
@@ -383,7 +411,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 SetStatus("Destination window is unavailable");
                 return;
             }
-            await InputTyper.WaitForModifierReleaseAsync(_typingCts.Token);
+            if (!await InputTyper.WaitForModifierReleaseAsync(ModifierReleaseTimeout, _typingCts.Token))
+            {
+                SetStatus("Modifier keys are still held");
+                ShowSafeError("TypeyTypey did not start typing because Ctrl, Alt, Shift or the Windows key is still held down. Release it and try again.");
+                return;
+            }
             await Task.Delay(_settings.InitialDelayMs, _typingCts.Token);
             // Another application may have taken focus during the delay.
             if (!await WindowFocus.RestoreAsync(destination, _typingCts.Token))
@@ -391,6 +424,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 SetStatus("Destination window is unavailable");
                 return;
             }
+            // The wait above cannot see held keys when a higher-integrity window has focus, so the
+            // hotkey's own modifiers are released outright rather than trusted to be up already.
+            InputTyper.ReleaseModifiers(triggeringModifiers);
+            await InputTyper.SettleAsync(_typingCts.Token);
             await InputTyper.TypeTextAsync(text, _settings.CharacterDelayMs, _typingCts.Token);
             if (_settings.ClearClipboardAfterTyping)
             {

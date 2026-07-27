@@ -255,3 +255,52 @@ public sealed class PendingSelectionTests
         Assert.Contains("1 character.", PendingSelection.Describe(1, "Ctrl + Alt + V"));
     }
 }
+
+public sealed class HelpCommandTests
+{
+    [Theory]
+    [InlineData("--help")]
+    [InlineData("-h")]
+    [InlineData("/?")]
+    public void EveryHelpFlag_Parses(string flag)
+    {
+        Assert.True(CommandLine.TryParse([flag], out AppCommand command, out _, out AdminTaskMode mode));
+        Assert.Equal(AppCommand.Help, command);
+        Assert.Equal(AdminTaskMode.None, mode);
+    }
+
+    [Fact]
+    public void UsageIsDerivedFromTheDocumentedOptions()
+    {
+        foreach (CommandLineOption option in CommandLine.Options)
+            Assert.Contains(option.Flag, CommandLine.Usage);
+    }
+
+    [Fact]
+    public void EveryDocumentedOption_HasASummary()
+    {
+        foreach (CommandLineOption option in CommandLine.Options)
+        {
+            Assert.StartsWith("--", option.Flag);
+            Assert.False(string.IsNullOrWhiteSpace(option.Summary), $"{option.Flag} has no summary");
+        }
+    }
+
+    /// <summary>
+    /// Ties the help window's list to the parser. Without this an option could be documented and
+    /// still be rejected on the command line, which is the failure a user would report as a bug.
+    /// </summary>
+    [Fact]
+    public void EveryDocumentedOption_IsAcceptedByTheParser()
+    {
+        foreach (CommandLineOption option in CommandLine.Options)
+        {
+            string[] arguments = option.Flag.Split(' ');
+
+            Assert.True(CommandLine.TryParse(arguments, out AppCommand command, out _, out AdminTaskMode mode),
+                $"{option.Flag} is listed in help but does not parse");
+            Assert.True(command != AppCommand.None || mode != AdminTaskMode.None,
+                $"{option.Flag} parses but resolves to no action");
+        }
+    }
+}

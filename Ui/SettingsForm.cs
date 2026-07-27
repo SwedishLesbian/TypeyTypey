@@ -7,21 +7,22 @@ namespace TypeyTypey;
 internal sealed class SettingsForm : Form
 {
     private readonly TrayApplicationContext _context;
-    private readonly HotkeyControls _typeHotkey = new("Type Clipboard");
-    private readonly HotkeyControls _historyHotkey = new("Clipboard History");
-    private readonly NumericUpDown _characterDelay = new() { Minimum = 0, Maximum = 1_000, Increment = 5, Width = 90 };
-    private readonly NumericUpDown _initialDelay = new() { Minimum = 0, Maximum = 10_000, Increment = 50, Width = 90 };
-    private readonly CheckBox _clearClipboard = new() { Text = "Clear clipboard after typing", AutoSize = true };
-    private readonly CheckBox _monitoringEnabled = new() { Text = "Enable clipboard monitoring", AutoSize = true };
-    private readonly NumericUpDown _maximumHistory = new() { Minimum = 1, Maximum = 500, Width = 90 };
+    private readonly HotkeyControls _typeHotkey = new("Type clipboard");
+    private readonly HotkeyControls _historyHotkey = new("Clipboard history");
+    private readonly HotkeyControls _stopHotkey = new("Stop typing");
+    private readonly NumericUpDown _characterDelay = new() { Minimum = 0, Maximum = 1_000, Increment = 5, Width = 84 };
+    private readonly NumericUpDown _initialDelay = new() { Minimum = 0, Maximum = 10_000, Increment = 50, Width = 84 };
+    private readonly CheckBox _clearClipboard = new() { Text = "Clear the clipboard after typing", AutoSize = true };
+    private readonly CheckBox _monitoringEnabled = new() { Text = "Record copied text in the history", AutoSize = true };
+    private readonly NumericUpDown _maximumHistory = new() { Minimum = 1, Maximum = 500, Width = 84 };
     private readonly CheckBox _startWithWindows = new() { Text = "Start with Windows", AutoSize = true };
-    private readonly CheckBox _runAsAdministrator = new() { Text = "Run as administrator (requests UAC approval)", AutoSize = true };
+    private readonly CheckBox _runAsAdministrator = new() { Text = "Run as administrator", AutoSize = true };
     private readonly ComboBox _theme = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
     private readonly Button _save = new() { Text = "Save settings", AutoSize = true };
     private readonly Button _typeNow = new() { Text = "Type current clipboard", AutoSize = true };
-    private readonly Button _clearHistory = new() { Text = "Clear history", AutoSize = true };
-    private readonly Label _status = new() { AutoSize = true };
-    private readonly Label _elevationNotice = new() { AutoSize = true, Visible = false, Margin = new Padding(0, 6, 0, 0) };
+    private readonly Button _clearHistory = new() { Text = "Clear history now", AutoSize = true };
+    private readonly MutedLabel _status = new() { AutoSize = true };
+    private readonly Label _elevationNotice = new() { AutoSize = true };
 
     public SettingsForm(TrayApplicationContext context, Icon icon)
     {
@@ -99,7 +100,7 @@ internal sealed class SettingsForm : Form
         ThemeManager.Apply(this, theme);
         // Apply paints every label with the standard text colour, so the accent is restored after.
         // High contrast keeps the user's own palette untouched.
-        if (_elevationNotice.Visible && !ThemeManager.ShouldUseSystemPalette)
+        if (_elevationNotice.Parent is not null && !ThemeManager.ShouldUseSystemPalette)
             _elevationNotice.ForeColor = ThemeManager.PaletteFor(ThemeManager.Resolve(theme)).Accent;
         Refresh();
     }
@@ -118,62 +119,152 @@ internal sealed class SettingsForm : Form
         Location = location.Value;
     }
 
+    /// <summary>
+    /// A page of cards under a docked action bar, rather than a stack of group boxes. The bar is
+    /// outside the scrolling region so Save stays reachable at any window size.
+    /// </summary>
     private void BuildLayout()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, AutoScroll = true };
-        root.Controls.Add(Section("Hotkeys", _typeHotkey, _historyHotkey));
-        root.Controls.Add(Section("Typing", NumberRow("Character delay", _characterDelay, "ms"), NumberRow("Initial delay", _initialDelay, "ms"), _clearClipboard));
-        root.Controls.Add(Section("Clipboard", _monitoringEnabled, NumberRow("Maximum history entries", _maximumHistory), _clearHistory));
-        root.Controls.Add(Section("Appearance", LabelledRow("Theme", _theme)));
-        root.Controls.Add(Section("Startup", _startWithWindows, _runAsAdministrator));
-        root.Controls.Add(Section("About", new Label
-        {
-            Text = $"TypeyTypey v{VersionInfo.Display}\nTypes clipboard-derived text with native Unicode input. Clipboard history is memory-only.",
-            AutoSize = true
-        }));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var actions = new FlowLayoutPanel { AutoSize = true };
-        actions.Controls.AddRange([_save, _typeNow]);
-        root.Controls.Add(actions);
-        root.Controls.Add(_status);
+        var page = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            AutoScroll = true,
+            Padding = new Padding(UiKit.PagePadding, UiKit.SpaceWide, UiKit.PagePadding, UiKit.PagePadding)
+        };
+
+        page.Controls.Add(Header());
+        page.Controls.Add(UiKit.Eyebrow("Hotkeys"));
+        page.Controls.Add(Card(
+            _typeHotkey,
+            _historyHotkey,
+            _stopHotkey,
+            UiKit.Caption("Each hotkey works anywhere in Windows. Stop typing cancels a run in progress.")));
+
+        page.Controls.Add(UiKit.Eyebrow("Typing"));
+        page.Controls.Add(Card(
+            NumberRow("Character delay", _characterDelay, "ms"),
+            UiKit.Caption("Pause between keystrokes. Raise it if the target drops characters."),
+            NumberRow("Wait before typing", _initialDelay, "ms"),
+            UiKit.Caption("Time to click into the window you want the text to land in."),
+            _clearClipboard));
+
+        page.Controls.Add(UiKit.Eyebrow("Clipboard history"));
+        page.Controls.Add(Card(
+            _monitoringEnabled,
+            NumberRow("Keep at most", _maximumHistory, "entries"),
+            UiKit.Caption("History is held in memory only and is discarded when TypeyTypey exits."),
+            _clearHistory));
+
+        page.Controls.Add(UiKit.Eyebrow("Appearance"));
+        page.Controls.Add(Card(LabelledRow("Theme", _theme)));
+
+        page.Controls.Add(UiKit.Eyebrow("Startup"));
+        page.Controls.Add(Card(
+            _startWithWindows,
+            _runAsAdministrator,
+            UiKit.Caption("Administrator mode asks for UAC approval and is needed to type into elevated windows.")));
 
         // Elevation is otherwise invisible, and it is the whole point of the administrator setting.
         // Shown only when elevated, so the normal case stays uncluttered.
         if (PrivilegeManager.IsElevated())
         {
-            _elevationNotice.Text = "Running as administrator — can type into elevated applications.";
-            _elevationNotice.Visible = true;
+            _elevationNotice.Text = "Running as administrator. TypeyTypey can type into elevated windows.";
+            _elevationNotice.Margin = new Padding(0, UiKit.SpaceSection, 0, 0);
+            CardPanel notice = Card(_elevationNotice);
+            notice.AccentEdge = SystemColors.Highlight;
+            notice.Margin = new Padding(0, UiKit.SpaceSection, 0, 0);
+            page.Controls.Add(notice);
         }
-        root.Controls.Add(_elevationNotice);
+
+        root.Controls.Add(page, 0, 0);
+        root.Controls.Add(ActionBar(), 0, 1);
         Controls.Add(root);
 
         foreach (ThemeChoice choice in ThemeChoice.All)
             _theme.Items.Add(choice);
     }
 
-    private static GroupBox Section(string title, params Control[] controls)
+    private static Control Header()
     {
-        var box = new GroupBox { Text = title, AutoSize = true, Dock = DockStyle.Top, Padding = new Padding(10) };
-        var content = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        var stack = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Margin = new Padding(0)
+        };
+        stack.Controls.Add(new Label { Text = "TypeyTypey", Font = UiKit.Title, AutoSize = true, Margin = new Padding(0) });
+        stack.Controls.Add(new MutedLabel
+        {
+            Text = $"Version {VersionInfo.Display}",
+            Font = UiKit.Helper,
+            AutoSize = true,
+            Margin = new Padding(0, UiKit.SpaceTight, 0, 0)
+        });
+        return stack;
+    }
+
+    private Control ActionBar()
+    {
+        var host = new Panel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = new Padding(0) };
+        var bar = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 1,
+            AutoSize = true,
+            Padding = new Padding(UiKit.PagePadding, UiKit.SpaceWide, UiKit.PagePadding, UiKit.SpaceWide)
+        };
+
+        var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false, Margin = new Padding(0) };
+        _save.Margin = new Padding(0, 0, UiKit.Space, 0);
+        buttons.Controls.AddRange([_save, _typeNow]);
+
+        _status.Margin = new Padding(0, UiKit.Space, 0, 0);
+        bar.Controls.Add(buttons);
+        bar.Controls.Add(_status);
+
+        // Added after the bar so the rule docks above it, anchoring the bar to the scrolling page.
+        host.Controls.Add(bar);
+        host.Controls.Add(new SeparatorPanel());
+        return host;
+    }
+
+    private static CardPanel Card(params Control[] controls)
+    {
+        var card = new CardPanel { Dock = DockStyle.Top };
+        var content = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Margin = new Padding(0)
+        };
         content.Controls.AddRange(controls);
-        box.Controls.Add(content);
-        return box;
+        card.Controls.Add(content);
+        return card;
     }
 
     private static FlowLayoutPanel NumberRow(string label, Control numeric, string suffix = "")
     {
-        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        row.Controls.Add(new Label { Text = label + ":", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, UiKit.SpaceTight) };
+        row.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(0, 5, UiKit.Space, 0) });
         row.Controls.Add(numeric);
         if (!string.IsNullOrEmpty(suffix))
-            row.Controls.Add(new Label { Text = suffix, AutoSize = true, Margin = new Padding(4, 6, 0, 0) });
+            row.Controls.Add(new MutedLabel { Text = suffix, AutoSize = true, Margin = new Padding(UiKit.SpaceTight, 5, 0, 0) });
         return row;
     }
 
     private static FlowLayoutPanel LabelledRow(string label, Control control)
     {
-        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        row.Controls.Add(new Label { Text = label + ":", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+        row.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(0, 5, UiKit.Space, 0) });
         row.Controls.Add(control);
         return row;
     }
@@ -182,6 +273,7 @@ internal sealed class SettingsForm : Form
     {
         _typeHotkey.SetBinding(settings.TypeClipboardHotkey);
         _historyHotkey.SetBinding(settings.HistoryHotkey);
+        _stopHotkey.SetBinding(settings.StopTypingHotkey);
         _characterDelay.Value = settings.CharacterDelayMs;
         _initialDelay.Value = settings.InitialDelayMs;
         _clearClipboard.Checked = settings.ClearClipboardAfterTyping;
@@ -198,6 +290,7 @@ internal sealed class SettingsForm : Form
         {
             TypeClipboardHotkey = _typeHotkey.GetBinding(),
             HistoryHotkey = _historyHotkey.GetBinding(),
+            StopTypingHotkey = _stopHotkey.GetBinding(),
             CharacterDelayMs = (int)_characterDelay.Value,
             InitialDelayMs = (int)_initialDelay.Value,
             ClearClipboardAfterTyping = _clearClipboard.Checked,
@@ -268,7 +361,12 @@ internal sealed class SettingsForm : Form
         {
             AutoSize = true;
             WrapContents = false;
-            Controls.Add(new Label { Text = label + ":", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+            Margin = new Padding(0, 0, 0, UiKit.Space);
+            // A fixed label width lines the three hotkey rows up into a column without a table.
+            Controls.Add(new Label { Text = label, AutoSize = false, Width = 108, Margin = new Padding(0, 5, UiKit.Space, 0) });
+            foreach (CheckBox modifier in new[] { _ctrl, _alt, _shift, _win })
+                modifier.Margin = new Padding(0, 4, UiKit.Space, 0);
+            _key.Margin = new Padding(UiKit.SpaceTight, 1, 0, 0);
             Controls.AddRange([_ctrl, _alt, _shift, _win, _key]);
             foreach (Keys key in KeysList())
                 _key.Items.Add(key);

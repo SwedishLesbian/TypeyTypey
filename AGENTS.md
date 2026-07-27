@@ -16,7 +16,7 @@ A single-purpose Windows tray utility that types clipboard-derived text as simul
 keystrokes via Win32 `SendInput`, for targets that accept keyboard input but reject `Ctrl+V`
 (RDP, KVM/IPMI consoles, credential dialogs, legacy applications).
 
-~2,400 lines of C# across 22 files. .NET 8 / WinForms, published as a self-contained single-file
+~3,200 lines of C# across 24 files. .NET 8 / WinForms, published as a self-contained single-file
 `win-x64` executable. No dependency outside the BCL and xunit.
 
 See [README.md](README.md) for user-facing behavior and CLI surface.
@@ -30,7 +30,7 @@ navigation, not for layering, and the `.csproj` needs no change when files move 
 |---|---|
 | `App/` | Entry point and application lifetime — `Program`, `TrayApplicationContext`, `AppCommand` |
 | `Core/` | Non-visual state and services — settings, theme enum, history, version, single-instance |
-| `Ui/` | Windows and presentation — `SettingsForm`, `HistoryPicker`, `ThemeManager`, `WindowPlacement` |
+| `Ui/` | Windows and presentation — `SettingsForm`, `HistoryPicker`, `InfoDialog`, `ThemeManager`, `WindowPlacement`, `UiKit` |
 | `Windows/` | Win32 P/Invoke, one concern per file — hotkeys, input injection, clipboard, focus, privilege, startup |
 
 `Windows/` files use Win32 field names (`dx`, `wVk`, `dwFlags`) that intentionally violate .NET
@@ -165,7 +165,12 @@ Covered: `ClipboardHistory` ordering/dedup/trim/clear, `CommandLine` parsing, th
 size, `AppSettings.Normalize` clamps, theme persistence and settings-file compatibility,
 `HotkeyBinding` validity and equality, version formatting, and `WindowPlacement` sizing and
 monitor-clamping policy, `--admintask` parsing, scheduled-task XML and picker selection rules.
-96 tests as of v1.0.4.
+v1.0.5 adds the modifier-release decision rule, three-way hotkey validation, working-area fitting,
+`--help` parsing and the product metadata About reads. 125 tests as of v1.0.5.
+
+`HelpCommandTests.EveryDocumentedOption_IsAcceptedByTheParser` is worth keeping. It walks
+`CommandLine.Options` — the list the Help window renders — and asserts each entry actually parses,
+so an option cannot be documented and simultaneously rejected on the command line.
 
 **`InputTyperTests.NativeInputSize_MatchesTheWin32InputAbi` is a load-bearing regression test.**
 It exists because v1.0.2 fixed a bug where omitting the unused `MOUSEINPUT` union member made
@@ -194,9 +199,9 @@ nothing. This was done for the v1.0.4 additions.
   platform behavior the code alone cannot convey. Match that density — sparse, and only where earned.
 - **UI is constructed in code,** not designer files. `SettingsForm.BuildLayout` is the pattern.
 
-### Two window rules that are not negotiable
+### Three rules that are not negotiable
 
-Both were learned from shipped defects and are easy to reintroduce.
+All three were learned from shipped defects and are easy to reintroduce.
 
 1. **Application services never live on a visible window.** `TrayApplicationContext` owns lifetime,
    the tray icon, clipboard monitoring, IPC and typing; `HotkeyWindow` owns the hotkey
@@ -210,6 +215,19 @@ Both were learned from shipped defects and are easy to reintroduce.
    the real factor. Sizes are written in logical (96 DPI) units and come from `WindowPlacement`.
    Verified by measurement: without the bracket a 615x700 logical client stayed 615x700 device
    pixels at 144 DPI; with it, 922x1050.
+3. **Never treat a keyboard-state read as authoritative.** `GetAsyncKeyState` returns `0` both for
+   "the key is up" and for "UIPI will not let you read the foreground thread's input", and nothing
+   in the return value separates them. A non-elevated process reading state while a
+   higher-integrity window has focus therefore sees an idle keyboard no matter what is held. This
+   is what corrupted and truncated typing through v1.0.4: the wait for the hotkey to be released
+   was satisfied instantly and the characters went out as control codes. Guards over input state
+   must not depend on being allowed to read it — `InputTyper.ReleaseModifiers` releases the
+   hotkey's modifiers outright instead. The same trap applies to `GetKeyState` and to any future
+   check of what the user is pressing.
+
+   This is the general form of a rule the codebase already follows elsewhere:
+   `TrayApplicationContext.ReadClipboard` deliberately distinguishes "no text" from "could not
+   read", because collapsing them decides the wrong thing.
 
 ## 7. Delivery
 
@@ -266,6 +284,32 @@ review rather than by running it.
 
 The picker selection rules (#10) are closed without runtime verification, by the maintainer's
 decision. Treat them as unproven at runtime, not as confirmed.
+
+## 9a. Manual validation record — v1.0.5
+
+Verified by running the published executable on Windows, 2026-07-27:
+
+- `tools/diagnostics/probe-behaviour.ps1` — all ten checks, including the two new ones covering
+  `--help` opening its own window without disturbing the running instance.
+- Settings measured at 615x760 logical (922x1140 device at 144 DPI).
+- Help measured at 660x780 logical, clamped by `WindowPlacement.FitToWorkingArea`.
+- Settings and Help inspected by screenshot in Dark theme. Two defects were found that way and
+  fixed: `InfoDialog` themed itself before its content existed, leaving each card filled with the
+  default window colour and showing a bright ring through the card padding; and the Help term column
+  was a fixed 148 px, which clipped `--clear-history` and rendered the three `--admintask` variants
+  as identical stubs. The column is now measured from the widest term.
+- `probe-pipe-acl.ps1` and `probe-elevation.ps1` still pass.
+
+### Still unverified on Windows
+
+**The issue #13 fix itself has not been observed working, and cannot be from this environment.** The
+agent shell runs elevated, so `GetAsyncKeyState` is readable and the defect does not reproduce. What
+was verified is that the application builds, runs, registers three hotkeys and types; what was not
+is the non-elevated path the fix exists for. That needs a non-elevated TypeyTypey typing into a
+window it does not outrank, with the hotkey held down at the moment of the press.
+
+Also unverified at runtime: the Stop typing hotkey actually cancelling a run in progress, the
+five-second modifier timeout message, Light and high-contrast rendering of the new cards, and About.
 
 ## 10. Escalate rather than decide
 

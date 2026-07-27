@@ -14,7 +14,12 @@ internal static class WindowPlacement
     /// sized dialog. Absolute pixel counts from that measurement were unusable because the
     /// screenshot's DPI metadata was unknown, but the ratio is scale-invariant.
     /// </summary>
-    public static Size DefaultSettingsClientSize => new(615, 700);
+    /// <remarks>
+    /// Raised to the top of that approved range in v1.0.5, when a third hotkey row and the per-row
+    /// captions were added. Content taller than this scrolls; the Save bar is docked outside the
+    /// scrolling region so it stays reachable regardless.
+    /// </remarks>
+    public static Size DefaultSettingsClientSize => new(615, 760);
 
     /// <summary>
     /// Outer-window floor for Settings, in logical pixels. Below this the root panel scrolls rather
@@ -23,6 +28,31 @@ internal static class WindowPlacement
     public static Size MinimumSettingsWindowSize => new(460, 420);
 
     public static Size DefaultPickerClientSize => new(640, 420);
+
+    /// <summary>
+    /// Help is wide enough for a command flag and its explanation side by side, and tall enough that
+    /// most of the page is visible without scrolling. It is a preference, not a promise: a short
+    /// working area wins, via <see cref="FitToWorkingArea"/>.
+    /// </summary>
+    public static Size DefaultHelpClientSize => new(660, 780);
+
+    public static Size DefaultAboutClientSize => new(420, 330);
+
+    /// <summary>
+    /// Shrinks a window so it fits the working area it will open on, keeping a margin so the frame
+    /// and taskbar stay clear. Device pixels, so this runs after the DPI scale pass.
+    ///
+    /// A window sized in logical units can overflow a scaled display: 780 logical is 1170 device
+    /// pixels at 150%, which does not fit a 1080p screen. Growing the default without this would
+    /// trade a scroll bar for a window taller than the desktop.
+    /// </summary>
+    internal static Size FitToWorkingArea(Size window, Rectangle workingArea)
+    {
+        const int margin = 32;
+        return new Size(
+            Math.Min(window.Width, Math.Max(240, workingArea.Width - margin)),
+            Math.Min(window.Height, Math.Max(240, workingArea.Height - margin)));
+    }
 
     /// <summary>
     /// A saved position is only honoured when a meaningful part of the window's title bar remains

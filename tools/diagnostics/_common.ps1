@@ -81,7 +81,7 @@ function Get-UiWindows([int]$ProcessId) {
     $result = @()
     foreach ($h in [Probe]::TopLevel([uint32]$ProcessId)) {
         $cap = [Probe]::Caption($h)
-        if ($cap -eq 'TypeyTypey Settings' -or $cap -eq 'Clipboard History') {
+        if ($cap -in @('TypeyTypey Settings', 'Clipboard History', 'TypeyTypey Help', 'About TypeyTypey')) {
             $r = New-Object Probe+RECT; [void][Probe]::GetWindowRect($h, [ref]$r)
             $c = New-Object Probe+RECT; [void][Probe]::GetClientRect($h, [ref]$c)
             $result += [pscustomobject]@{

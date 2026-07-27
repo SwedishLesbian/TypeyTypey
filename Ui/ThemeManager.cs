@@ -92,17 +92,45 @@ internal static class ThemeManager
 
         form.BackColor = palette.Window;
         form.ForeColor = palette.Text;
-        ApplyToChildren(form.Controls, palette, effective);
+        ApplyToChildren(form.Controls, palette, effective, palette.Window);
         TrySetDarkTitleBar(form, effective == EffectiveTheme.Dark);
     }
 
-    private static void ApplyToChildren(Control.ControlCollection controls, ThemePalette palette, EffectiveTheme theme)
+    /// <summary>
+    /// Paints a control tree. <paramref name="background"/> is the colour behind the controls at this
+    /// level, which changes when the walk descends into a <see cref="CardPanel"/>: a card fills
+    /// itself with the surface colour, so anything inside it must match the surface rather than the
+    /// page, or it paints a visible rectangle over the card.
+    /// </summary>
+    private static void ApplyToChildren(Control.ControlCollection controls, ThemePalette palette, EffectiveTheme theme, Color background)
     {
         bool dark = theme == EffectiveTheme.Dark;
         foreach (Control control in controls)
         {
+            Color childBackground = background;
             switch (control)
             {
+                case CardPanel card:
+                    // The card paints its own fill and border, so BackColor stays the page colour
+                    // and the rounded corners blend into it.
+                    card.BackColor = background;
+                    card.ForeColor = palette.Text;
+                    card.CardColor = palette.Surface;
+                    card.BorderColor = palette.Border;
+                    if (card.AccentEdge != Color.Empty)
+                        card.AccentEdge = palette.Accent;
+                    childBackground = palette.Surface;
+                    break;
+
+                case EyebrowLabel or MutedLabel:
+                    control.BackColor = background;
+                    control.ForeColor = palette.DisabledText;
+                    break;
+
+                case SeparatorPanel:
+                    control.BackColor = palette.Border;
+                    break;
+
                 case TextBox textBox:
                     textBox.BackColor = palette.Surface;
                     textBox.ForeColor = palette.Text;
@@ -134,22 +162,14 @@ internal static class ThemeManager
                     button.FlatAppearance.BorderColor = palette.Border;
                     break;
 
-                case GroupBox groupBox:
-                    // Flat style makes the group border honour ForeColor; the default style paints
-                    // it with a fixed system colour that vanishes on a dark background.
-                    groupBox.FlatStyle = dark ? FlatStyle.Flat : FlatStyle.Standard;
-                    groupBox.BackColor = palette.Window;
-                    groupBox.ForeColor = palette.Text;
-                    break;
-
                 default:
-                    control.BackColor = palette.Window;
+                    control.BackColor = background;
                     control.ForeColor = palette.Text;
                     break;
             }
 
             if (control.HasChildren)
-                ApplyToChildren(control.Controls, palette, theme);
+                ApplyToChildren(control.Controls, palette, theme, childBackground);
         }
     }
 

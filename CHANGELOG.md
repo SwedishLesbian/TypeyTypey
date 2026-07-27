@@ -2,6 +2,29 @@
 
 All notable changes to TypeyTypey are documented here.
 
+## 1.0.5 - unreleased
+
+- **Fixed: typing was corrupted and cut short when TypeyTypey was not running as administrator.**
+  Held modifier keys leaked into the typed text, so characters reached the target as control codes
+  and the paste arrived truncated. TypeyTypey waits for the hotkey to be released before typing, but
+  that wait asks Windows which keys are down, and a process cannot read the foreground window's
+  input state when that window outranks it. Windows reports the refusal as "no keys held", which is
+  the same answer it gives when the keyboard really is clear, so the wait returned immediately. The
+  hotkey's own modifier keys are now released outright before typing starts, which does not depend
+  on being allowed to read them. ([#13](https://github.com/SwedishLesbian/TypeyTypey/issues/13))
+- **Added a Stop typing hotkey**, `Ctrl+Alt+X` by default, that cancels a typing run already under
+  way. ([#14](https://github.com/SwedishLesbian/TypeyTypey/issues/14))
+- Waiting for modifier keys to be released now gives up after five seconds and says so, instead of
+  waiting forever with no indication.
+- **Added a Help window** covering what the program does, the configured hotkeys and every command
+  line option. Open it from the tray menu or with `--help` (`-h` and `/?` also work). It works
+  whether or not an instance is already running.
+- **About** now shows the product, description, author, version and copyright recorded in the
+  executable rather than a fixed string, and the redundant About section has been removed from
+  Settings.
+- Settings has been redesigned: grouped cards with plain-language captions, and a Save bar that
+  stays in place instead of scrolling away with the content.
+
 ## 1.0.4 - 2026-07-27
 
 Fixes two runtime defects that remained present in v1.0.3. The v1.0.3 changes were in the shipped

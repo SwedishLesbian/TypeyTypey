@@ -6,6 +6,12 @@ internal sealed class AppSettings
 {
     public HotkeyBinding TypeClipboardHotkey { get; set; } = new();
     public HotkeyBinding HistoryHotkey { get; set; } = new() { Shift = true };
+
+    /// <summary>
+    /// Cancels a typing run in progress. Absent from settings files written before v1.0.5, where the
+    /// property initialiser supplies the default rather than leaving a null binding behind.
+    /// </summary>
+    public HotkeyBinding StopTypingHotkey { get; set; } = new() { Key = Keys.X };
     public int CharacterDelayMs { get; set; } = 15;
     public int InitialDelayMs { get; set; } = 500;
     public bool ClearClipboardAfterTyping { get; set; }
@@ -43,6 +49,7 @@ internal sealed class AppSettings
     {
         TypeClipboardHotkey ??= new HotkeyBinding();
         HistoryHotkey ??= new HotkeyBinding { Shift = true };
+        StopTypingHotkey ??= new HotkeyBinding { Key = Keys.X };
         CharacterDelayMs = Math.Clamp(CharacterDelayMs, 0, 1_000);
         InitialDelayMs = Math.Clamp(InitialDelayMs, 0, 10_000);
         MaximumHistoryEntries = Math.Clamp(MaximumHistoryEntries, 1, 500);
@@ -50,6 +57,38 @@ internal sealed class AppSettings
         // theme in play. System.Text.Json will happily deserialize any integer into the enum.
         if (!Enum.IsDefined(Theme))
             Theme = AppTheme.System;
+    }
+
+    /// <summary>
+    /// Checks the three global hotkeys as a set and returns why they cannot be used, or null when
+    /// they are fine. Lives here rather than on the window that edits them so the rule is one thing
+    /// in one place, and so it can be tested without constructing a form.
+    /// </summary>
+    public string? ValidateHotkeys()
+    {
+        (string Name, HotkeyBinding Binding)[] all =
+        [
+            ("Type clipboard", TypeClipboardHotkey),
+            ("Clipboard history", HistoryHotkey),
+            ("Stop typing", StopTypingHotkey)
+        ];
+
+        foreach ((string name, HotkeyBinding binding) in all)
+        {
+            if (!binding.IsValid)
+                return $"The {name.ToLowerInvariant()} hotkey needs at least one modifier key.";
+        }
+
+        for (int first = 0; first < all.Length; first++)
+        {
+            for (int second = first + 1; second < all.Length; second++)
+            {
+                if (all[first].Binding.IsSameAs(all[second].Binding))
+                    return $"{all[first].Name} and {all[second].Name.ToLowerInvariant()} are set to the same combination. Give each one a different key.";
+            }
+        }
+
+        return null;
     }
 
     public void Save()
