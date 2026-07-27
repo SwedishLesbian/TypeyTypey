@@ -87,6 +87,22 @@ public sealed class ScheduledTaskXmlTests
         Assert.DoesNotContain(Sid, xml);
     }
 
+    [Theory]
+    [InlineData("<RegistrationInfo>", "<URI>", "<Description>")]
+    [InlineData("<Enabled>true</Enabled>", "<UserId>", "<Delay>")]
+    [InlineData("<Triggers>", "<Principals>", "<Actions ")]
+    public void ElementsFollowTheOrderTheSchemaRequires(string first, string second, string third)
+    {
+        // Task Scheduler validates against its XSD and rejects a definition whose sequence is out of
+        // order, with no indication of which element is at fault. registrationInfoType puts URI
+        // before Description, and logonTriggerType extends the base trigger with UserId then Delay.
+        string xml = ScheduledTaskManager.BuildTaskXml(AdminTaskMode.Logon, @"C:\Apps\TypeyTypey.exe", Sid);
+
+        Assert.True(xml.IndexOf(first, StringComparison.Ordinal) < xml.IndexOf(second, StringComparison.Ordinal)
+            && xml.IndexOf(second, StringComparison.Ordinal) < xml.IndexOf(third, StringComparison.Ordinal),
+            $"expected {first} before {second} before {third}");
+    }
+
     [Fact]
     public void ExecutablePathIsXmlEscaped()
     {

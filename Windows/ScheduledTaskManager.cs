@@ -120,9 +120,13 @@ internal static class ScheduledTaskManager
         // Both triggers wait before starting. At sign-in the notification area is not ready
         // immediately, and a tray icon added too early is silently dropped; at boot, SYSTEM starts
         // long before the services TypeyTypey reads the clipboard through.
+        //
+        // Element order is not cosmetic. Task Scheduler validates against its XSD and rejects the
+        // whole definition when a sequence is out of order: logonTriggerType extends the base
+        // trigger with UserId then Delay, so Enabled, UserId, Delay — not Delay, UserId.
         string trigger = system
             ? "<BootTrigger><Enabled>true</Enabled><Delay>PT30S</Delay></BootTrigger>"
-            : $"<LogonTrigger><Enabled>true</Enabled><Delay>PT10S</Delay><UserId>{Escape(userSid)}</UserId></LogonTrigger>";
+            : $"<LogonTrigger><Enabled>true</Enabled><UserId>{Escape(userSid)}</UserId><Delay>PT10S</Delay></LogonTrigger>";
 
         string principal = system
             ? "<UserId>S-1-5-18</UserId><LogonType>ServiceAccount</LogonType>"
@@ -132,8 +136,8 @@ internal static class ScheduledTaskManager
             <?xml version="1.0" encoding="UTF-16"?>
             <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
               <RegistrationInfo>
-                <Description>Starts TypeyTypey, which types clipboard text as simulated keyboard input.</Description>
                 <URI>\{TaskName}</URI>
+                <Description>Starts TypeyTypey, which types clipboard text as simulated keyboard input.</Description>
               </RegistrationInfo>
               <Triggers>{trigger}</Triggers>
               <Principals>

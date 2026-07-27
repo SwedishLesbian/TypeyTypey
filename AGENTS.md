@@ -93,18 +93,6 @@ distribution's `dotnet-sdk-8.0` package (Ubuntu 8.0.129) omits
 with `MSB4019` before compilation starts. `-p:EnableWindowsTargeting=true` does not help — that
 switch unblocks the *official* SDK, which the container could not download.
 
-Where no Windows SDK is available, [`tools/linux-check/`](tools/linux-check/README.md) runs the part
-of the suite that has no Windows dependency:
-
-```bash
-dotnet test tools/linux-check/LinuxPolicyCheck.csproj
-```
-
-It links the platform-free sources and `SelectionAndTaskTests.cs` and stubs the rest. Read its
-README before quoting a green run: it compiles no WinForms code and produces no executable, so CI on
-`windows-latest` remains the only evidence for the full suite and the binary. A Claude Code on the
-web session sets this up automatically through `.claude/hooks/session-start.sh`.
-
 ```bash
 dotnet.exe restore 'D:\TheEdge\KingslayerTM\TypeyTypey\TypeyTypey.Tests\TypeyTypey.Tests.csproj'
 dotnet.exe test    'D:\TheEdge\KingslayerTM\TypeyTypey\TypeyTypey.Tests\TypeyTypey.Tests.csproj' --configuration Release
@@ -116,6 +104,18 @@ Or `.\publish.ps1` from PowerShell on the Windows side. Expected output:
 `bin\TypeyTypey.exe` (~72 MB, self-contained). A post-publish target copies it there from the
 canonical `bin\Release\net8.0-windows\win-x64\publish\` directory, which is left in place so the
 CI artifact and release jobs are unaffected.
+
+Where no Windows SDK is available, [`tools/linux-check/`](tools/linux-check/README.md) runs the part
+of the suite that has no Windows dependency:
+
+```bash
+dotnet test tools/linux-check/LinuxPolicyCheck.csproj
+```
+
+It links the platform-free sources and `SelectionAndTaskTests.cs` and stubs the rest. Read its
+README before quoting a green run: it compiles no WinForms code and produces no executable, so CI on
+`windows-latest` remains the only evidence for the full suite and the binary. A Claude Code on the
+web session sets this up automatically through `.claude/hooks/session-start.sh`.
 
 ### Required validation before work is offered as ready
 
@@ -165,7 +165,7 @@ Covered: `ClipboardHistory` ordering/dedup/trim/clear, `CommandLine` parsing, th
 size, `AppSettings.Normalize` clamps, theme persistence and settings-file compatibility,
 `HotkeyBinding` validity and equality, version formatting, and `WindowPlacement` sizing and
 monitor-clamping policy, `--admintask` parsing, scheduled-task XML and picker selection rules.
-88 tests as of v1.0.4.
+91 tests as of v1.0.4.
 
 **`InputTyperTests.NativeInputSize_MatchesTheWin32InputAbi` is a load-bearing regression test.**
 It exists because v1.0.2 fixed a bug where omitting the unused `MOUSEINPUT` union member made
