@@ -20,6 +20,25 @@ scale factor, so its requested dimensions were consumed as raw device pixels —
 that produced a 510x610 pixel window. Settings and the history picker now scale properly at any
 display scaling.
 
+## New in this release
+
+**Selecting from the Clipboard History picker arms the hotkey instead of typing.** Choosing an entry
+used to start the typing countdown straight away, which meant deciding where the text should go
+before opening the picker. The chosen entry now becomes what `Ctrl+Alt+V` types, confirmed by a
+notification that reports the length and the hotkey — never the text. Pick the entry, click the
+destination, press the hotkey; press it again for the next field. Copying something new, deleting
+the entry, or clearing the history hands the hotkey back to the live clipboard.
+
+**Deleting a history entry asks first.** Delete sits one key away from the arrow keys used to browse
+the list, and an in-memory history has nothing to undo it with.
+
+**New `--admintask` option.** It registers a Windows scheduled task that starts TypeyTypey with
+administrator rights when you sign in, so typing into elevated applications no longer costs a UAC
+prompt at every start. `--admintask off` removes it. `--admintask system` registers a boot-time
+SYSTEM variant instead — that one runs in session 0, where there is no desktop, no tray icon and no
+way to reach your applications; see the README before using it. Creating a task turns **Start with
+Windows** off so that only one copy starts.
+
 ## Also in this release
 
 - TypeyTypey starts quietly in the notification area, as documented, rather than opening the Settings window on every launch.

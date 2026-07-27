@@ -16,7 +16,7 @@ A single-purpose Windows tray utility that types clipboard-derived text as simul
 keystrokes via Win32 `SendInput`, for targets that accept keyboard input but reject `Ctrl+V`
 (RDP, KVM/IPMI consoles, credential dialogs, legacy applications).
 
-~2,000 lines of C# across 19 files. .NET 8 / WinForms, published as a self-contained single-file
+~2,400 lines of C# across 22 files. .NET 8 / WinForms, published as a self-contained single-file
 `win-x64` executable. No dependency outside the BCL and xunit.
 
 See [README.md](README.md) for user-facing behavior and CLI surface.
@@ -87,6 +87,24 @@ Verified working 2026-07-25: SDK `8.0.423` at `C:\Program Files\dotnet\sdk`, inv
 `dotnet.exe` from WSL with **Windows-style absolute paths** (`D:\TheEdge\...`). Passing a Linux
 path (`/mnt/d/...`) to `dotnet.exe` will not work; translate with `wslpath -w` if needed.
 
+Measured again 2026-07-27 on a Linux-only agent container, which narrows the reason: the
+distribution's `dotnet-sdk-8.0` package (Ubuntu 8.0.129) omits
+`Sdks/Microsoft.NET.Sdk.WindowsDesktop` entirely, so any `UseWindowsForms` project fails at import
+with `MSB4019` before compilation starts. `-p:EnableWindowsTargeting=true` does not help — that
+switch unblocks the *official* SDK, which the container could not download.
+
+Where no Windows SDK is available, [`tools/linux-check/`](tools/linux-check/README.md) runs the part
+of the suite that has no Windows dependency:
+
+```bash
+dotnet test tools/linux-check/LinuxPolicyCheck.csproj
+```
+
+It links the platform-free sources and `SelectionAndTaskTests.cs` and stubs the rest. Read its
+README before quoting a green run: it compiles no WinForms code and produces no executable, so CI on
+`windows-latest` remains the only evidence for the full suite and the binary. A Claude Code on the
+web session sets this up automatically through `.claude/hooks/session-start.sh`.
+
 ```bash
 dotnet.exe restore 'D:\TheEdge\KingslayerTM\TypeyTypey\TypeyTypey.Tests\TypeyTypey.Tests.csproj'
 dotnet.exe test    'D:\TheEdge\KingslayerTM\TypeyTypey\TypeyTypey.Tests\TypeyTypey.Tests.csproj' --configuration Release
@@ -131,7 +149,10 @@ publish a release without being told to. Work stops in the local repository with
 ## 5. Testing
 
 `TypeyTypey.Tests/` — xunit. `ClipboardHistoryTests.cs` covers history, CLI parsing and the INPUT
-ABI; `PolicyTests.cs` covers settings, theme, hotkey bindings, version and placement policy. The
+ABI; `PolicyTests.cs` covers settings, theme, hotkey bindings, version and placement policy;
+`SelectionAndTaskTests.cs` covers `--admintask` parsing, the scheduled-task XML and the picker
+selection rules. That third file deliberately touches no WinForms type, so it is the part of the
+suite a non-Windows machine can still run — see §4. The
 main project exposes internals via
 `InternalsVisibleTo("TypeyTypey.Tests")` in `Properties/AssemblyInfo.cs`, so internal types are
 directly testable without widening their visibility.
@@ -143,7 +164,8 @@ dotnet test .\TypeyTypey.Tests\TypeyTypey.Tests.csproj   # requires the Windows 
 Covered: `ClipboardHistory` ordering/dedup/trim/clear, `CommandLine` parsing, the Win32 `INPUT` ABI
 size, `AppSettings.Normalize` clamps, theme persistence and settings-file compatibility,
 `HotkeyBinding` validity and equality, version formatting, and `WindowPlacement` sizing and
-monitor-clamping policy. 68 tests as of v1.0.4.
+monitor-clamping policy, `--admintask` parsing, scheduled-task XML and picker selection rules.
+88 tests as of v1.0.4.
 
 **`InputTyperTests.NativeInputSize_MatchesTheWin32InputAbi` is a load-bearing regression test.**
 It exists because v1.0.2 fixed a bug where omitting the unused `MOUSEINPUT` union member made
@@ -216,70 +238,34 @@ Do not commit `bin/`, `obj/`, or built executables.
 - Named-pipe ACL exposure — measured, then restricted to owner + LocalSystem. See `SECURITY.md`.
 - Bare `catch { }` around startup registration — now typed, reported, and reverted consistently.
 
-## 9. Pending manual validation — v1.0.4
+## 9. Manual validation record — v1.0.4
 
-**These block tagging v1.0.4.** Everything below is visual or requires a UAC prompt, so it cannot be
-automated and was not verified by the agent that implemented the change. Tick items off here as they
-are confirmed; delete this section once the release is tagged.
+Acceptance testing was performed by the maintainer on 2026-07-27 against the published executable,
+and recorded in issues #6 and #7. **Confirmed:** theme system (light, dark, system, live Windows
+switch, high contrast); elevation, including that a chosen administrator mode persists across runs
+and that the UAC prompt still has to be accepted; tray double-click and the right-click menu;
+settings preserved across display scaling; the tray icon surviving the closing of every window;
+picker keyboard navigation.
 
-The development machine used for v1.0.4 ran at 144 DPI (150%) with UAC disabled and a single admin
-account, which is why these specific gaps exist.
+Two defects were raised from that pass and are fixed on this branch: selecting a history entry
+started the typing timer instead of arming the hotkey (#9, #7), and deleting an entry took effect
+with no confirmation (#7).
 
-The implementation is complete and committed on the `agent/runtime-ui-theme` branch, unpushed.
-`git log main..HEAD` carries the reasoning for each change; that history is the authoritative record
-of what was done and why, and is not restated here.
+### Still unverified on Windows
 
-### UAC and elevation — needs UAC enabled and a reboot
+The three behaviours added after acceptance testing have unit coverage for their decision rules and
+none for their runtime behaviour. They were implemented on a Linux container that cannot build this
+project (§4), so no agent has seen them run.
 
-With UAC off, an admin account has no split token, every process runs elevated, and no consent
-prompt can be raised. `EnableLUA` requires a **reboot** to take effect.
-
-- [ ] Non-elevated launch: tray tooltip reads `TypeyTypey`, no elevation line in Settings.
-- [ ] `TypeyTypey.exe --admin` raises UAC; accepting yields tooltip `TypeyTypey (Administrator)` and the elevation line at the bottom of Settings.
-- [ ] `--admin` again while elevated: balloon says it is already elevated, nothing restarts, still one process.
-- [ ] Declining the UAC prompt leaves TypeyTypey running unelevated with a cancellation message, and does not exit.
-- [ ] The **Run as administrator** checkbox still performs the same restart, and cancelling reverts the setting.
-
-### Display scaling
-
-Only 150% was measurable locally. Settings client is 615x700 logical.
-
-- [ ] 100%, 125% and 200%: all sections fit, Save and Type buttons reachable, status text visible, Theme control uncrowded.
-- [ ] Shrink below the minimum: the layout scrolls rather than clipping.
-- [ ] Saved position honoured on reopen; move to a second monitor, close, disconnect it, reopen — window lands somewhere visible.
-
-### Theme
-
-- [ ] Light and Dark applied to Settings and the picker: search box, history list, buttons, labels, check boxes, combo boxes, numeric controls, group-box labels and borders, status text.
-- [ ] Selected history entry and search selection are clearly visible in Dark. **`ListBox` selection uses the system highlight rather than a themed colour — most likely to disappoint.**
-- [ ] Keyboard focus indicators visible; disabled controls distinguishable; no white-on-white or dark-on-dark.
-- [ ] System default follows a live Windows light/dark switch with both windows reopened.
-- [ ] Preference survives restart. High contrast remains readable.
-- [ ] Tray context menu and About dialog readable in Dark.
-
-### Typing and existing behaviour
-
-- [ ] ASCII, punctuation, Unicode, and a long generated password into Notepad.
-- [ ] An RDP password prompt and an elevated target with administrator mode on.
-- [ ] Tray double-click and every tray menu item.
-- [ ] Picker keys: arrows, Enter, Escape, Delete, double-click; only one picker at a time.
-- [ ] History is empty after exit and restart.
-
-### Diagnostic probes
-
-Version controlled at [`tools/diagnostics/`](tools/diagnostics/), which has its own README covering
-each probe and the measurement traps. Run after `.\publish.ps1`; each exits non-zero on failure.
-
-```powershell
-.\tools\diagnostics\probe-behaviour.ps1    # v1.0.4 runtime regression suite
-.\tools\diagnostics\probe-elevation.ps1    # elevation notice matches elevation state
-.\tools\diagnostics\probe-pipe-acl.ps1     # command pipe DACL is restricted
-dotnet run --project .\tools\diagnostics\ScalingDiag\ScalingDiag.csproj
-```
-
-Probes must set `PER_MONITOR_AWARE_V2` before any `GetWindowRect` call. PowerShell is DPI-unaware by
-default and Windows silently virtualises the results, which produced measurements off by exactly the
-scale factor during the v1.0.4 investigation.
+- [ ] Picker selection: choosing an entry shows the notification, types nothing, and the next
+      `Ctrl+Alt+V` types that entry into the focused window — including a second field.
+- [ ] Copying new text, deleting the entry, and clearing history each return the hotkey to the
+      live clipboard.
+- [ ] Delete in the picker prompts, defaults to No, and removes the entry only on Yes.
+- [ ] `--admintask` raises one UAC prompt, creates the **TypeyTypey** task, turns off Start with
+      Windows, and yields an elevated tray icon at the next sign-in with no prompt.
+- [ ] `--admintask off` removes the task; `--admintask system` registers the boot/SYSTEM variant
+      and reports the session 0 warning.
 
 ## 10. Escalate rather than decide
 

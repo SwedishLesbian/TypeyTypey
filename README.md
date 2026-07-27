@@ -29,7 +29,8 @@ Perfect for:
 - Portable: no installer or administrator privileges required
 - Configurable hotkeys and 1–500 history entries
 - Memory-only clipboard history with duplicate collapse
-- Optional administrator-mode restart for typing into elevated applications
+- History selection that arms the next hotkey press instead of typing immediately
+- Optional administrator-mode restart, or a scheduled task that starts elevated at sign-in
 
 ## Privacy
 
@@ -73,7 +74,9 @@ The executable is copied to `bin\TypeyTypey.exe` (also left in the canonical pub
 
 **Type current clipboard** reads the clipboard at the moment the shortcut is pressed, waits for the modifier keys to be released, then types the text into the window you had focused. This is the normal path for a password field, console, or legacy application that accepts keystrokes but rejects paste.
 
-**Clipboard history** opens a searchable picker of text copied since TypeyTypey started. Type to filter, use arrow keys to navigate, press Enter to select, Escape to close, or Delete to remove the selected item. The picker closes before typing begins and TypeyTypey restores the captured destination window.
+**Clipboard history** opens a searchable picker of text copied since TypeyTypey started. Type to filter, use arrow keys to navigate, press Enter (or double-click) to select, Escape to close, or Delete to remove the selected entry after confirming.
+
+Selecting an entry does not type it. It makes that entry what `Ctrl+Alt+V` will type, and a notification confirms the choice by length — never by showing the text. Pick the entry, click the destination field, then press `Ctrl+Alt+V`. The selection stays active so it can be typed into several fields, until you copy something new, delete it from the history, or clear the history — after which `Ctrl+Alt+V` returns to typing the current clipboard.
 
 ### Tray and settings
 
@@ -100,11 +103,24 @@ Run them from PowerShell in the folder containing the executable, for example:
 | `TypeyTypey.exe --resume` | Turns clipboard monitoring back on. | Resume collecting new text after a pause. |
 | `TypeyTypey.exe --clear-history` | Clears TypeyTypey’s in-memory history only. It does not clear the Windows clipboard. | Remove copied values from the picker immediately. |
 | `TypeyTypey.exe --admin` | Restarts TypeyTypey elevated through a standard UAC prompt. Affects this run only; the saved **Run as administrator** setting is unchanged. | Type into an elevated application once, without making elevation permanent. |
+| `TypeyTypey.exe --admintask` | Creates a Windows scheduled task that starts TypeyTypey with administrator rights when you sign in — with no UAC prompt. Prompts for elevation once, to create the task. | Type into elevated applications every day without approving UAC at each start. |
+| `TypeyTypey.exe --admintask system` | Creates the task to run at boot as the SYSTEM account instead. | Rarely useful — see the warning below. |
+| `TypeyTypey.exe --admintask off` | Removes the scheduled task. | Undo either of the above. |
 | `TypeyTypey.exe --exit` | Closes the running TypeyTypey instance cleanly. | End the background app from a script or shortcut. |
 
 If TypeyTypey is not already running, a command starts it, performs the requested action, and normally leaves it running. `--exit` is the exception: with no existing instance, it starts only long enough to exit cleanly.
 
 `--admin` is handled by whichever instance owns the single-instance lock, so it works whether or not TypeyTypey is already running. If it is running, that instance elevates itself and restarts; declining the UAC prompt leaves it running normally. If it is already elevated, it says so and does nothing.
+
+### Starting elevated automatically
+
+`--admintask` is the exception to the rule above: it does not talk to the running instance. It registers a Windows scheduled task named **TypeyTypey**, raising one UAC prompt to do so, then exits. Any instance already running is left alone.
+
+The default task starts TypeyTypey at sign-in, as your own account, with the highest privileges available — the equivalent of always answering yes to UAC, but only for TypeyTypey. It is created for whichever account runs the command, so run it from the account that will use it. Because the task replaces the ordinary startup entry, `--admintask` also turns **Start with Windows** off; otherwise two copies would start and the second would simply open Settings.
+
+`--admintask system` instead runs TypeyTypey at boot under the SYSTEM account. **SYSTEM starts in session 0, which has no desktop**: the tray icon does not appear, the hotkeys do not reach your session, and typing cannot be delivered to your applications. It exists for the specific case where something else drives TypeyTypey in that context; it is not a way to start TypeyTypey for daily use.
+
+Both forms are removed with `--admintask off`. Neither changes the **Run as administrator** setting, which remains the way to elevate a session on demand.
 
 ## Building
 

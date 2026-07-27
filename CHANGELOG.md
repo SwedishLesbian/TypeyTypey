@@ -2,7 +2,7 @@
 
 All notable changes to TypeyTypey are documented here.
 
-## 1.0.4 - 2026-07-25
+## 1.0.4 - 2026-07-27
 
 Fixes two runtime defects that remained present in v1.0.3. The v1.0.3 changes were in the shipped
 binary but did not produce the intended behaviour, so both are corrected here at the mechanism.
@@ -30,6 +30,17 @@ binary but did not produce the intended behaviour, so both are corrected here at
   window carries a confirming line at the bottom. Neither appears when running normally.
 - New `--admin` command line option restarts TypeyTypey elevated through UAC for that run, without
   changing the persisted **Run as administrator** setting.
+- **Choosing an entry in the Clipboard History picker no longer types it immediately.** The entry
+  becomes what the type hotkey will send, and an on-screen notification confirms the choice by
+  length. Pick the text first, then the destination window, then press the hotkey — and press it
+  again for a second field. Copying new text, deleting the entry or clearing the history returns the
+  hotkey to the live clipboard.
+- Deleting an entry from the picker now asks for confirmation. History is memory-only, so a
+  mistaken Delete could not be undone.
+- New `--admintask` command line option registers a Windows scheduled task that starts TypeyTypey
+  with administrator rights at sign-in, without a UAC prompt on every start. `--admintask system`
+  registers the boot-time SYSTEM variant, `--admintask off` removes either. Creating the task turns
+  **Start with Windows** off so only one copy starts.
 
 ## 1.0.3 - 2026-07-25
 
