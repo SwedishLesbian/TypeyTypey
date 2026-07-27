@@ -247,25 +247,25 @@ and that the UAC prompt still has to be accepted; tray double-click and the righ
 settings preserved across display scaling; the tray icon surviving the closing of every window;
 picker keyboard navigation.
 
-Two defects were raised from that pass and are fixed on this branch: selecting a history entry
-started the typing timer instead of arming the hotkey (#9, #7), and deleting an entry took effect
-with no confirmation (#7).
+Two defects were raised from that pass and are fixed in v1.0.4: selecting a history entry started
+the typing timer instead of arming the hotkey (#9, #7), and deleting an entry took effect with no
+confirmation (#7).
 
 ### Still unverified on Windows
 
-The three behaviours added after acceptance testing have unit coverage for their decision rules and
-none for their runtime behaviour. They were implemented on a Linux container that cannot build this
-project (§4), so no agent has seen them run.
+Everything added after that acceptance pass — the picker selection rules, the delete confirmation
+and `--admintask` — has unit coverage for its decision rules and none for its runtime behaviour. It
+was implemented on a Linux container that cannot build this project (§4), so no agent has seen any
+of it run.
 
-- [ ] Picker selection: choosing an entry shows the notification, types nothing, and the next
-      `Ctrl+Alt+V` types that entry into the focused window — including a second field.
-- [ ] Copying new text, deleting the entry, and clearing history each return the hotkey to the
-      live clipboard.
-- [ ] Delete in the picker prompts, defaults to No, and removes the entry only on Yes.
-- [ ] `--admintask` raises one UAC prompt, creates the **TypeyTypey** task, turns off Start with
-      Windows, and yields an elevated tray icon at the next sign-in with no prompt.
-- [ ] `--admintask off` removes the task; `--admintask system` registers the boot/SYSTEM variant
-      and reports the session 0 warning.
+The remaining verification lives in the issue tracker rather than here, so there is one list rather
+than two: **#11** (delete confirmation) and **#12** (`--admintask`). #12 is the one that matters
+most — it is the only change that shells out to another process, raises a UAC prompt and writes to
+Task Scheduler, and a schema-ordering defect that would have made every invocation fail was found by
+review rather than by running it.
+
+The picker selection rules (#10) are closed without runtime verification, by the maintainer's
+decision. Treat them as unproven at runtime, not as confirmed.
 
 ## 10. Escalate rather than decide
 
