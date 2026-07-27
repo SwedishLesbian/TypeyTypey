@@ -104,3 +104,91 @@ public sealed class ScheduledTaskXmlTests
         Assert.Contains(@"encoding=""UTF-16""", ScheduledTaskManager.BuildTaskXml(AdminTaskMode.Logon, "TypeyTypey.exe", Sid));
     }
 }
+
+public sealed class PendingSelectionTests
+{
+    [Fact]
+    public void NothingArmed_TypesTheLiveClipboard()
+    {
+        var pending = new PendingSelection();
+
+        Assert.False(pending.IsArmed);
+        Assert.Equal("clipboard", pending.Resolve(() => "clipboard"));
+    }
+
+    [Fact]
+    public void ArmedEntry_ReplacesTheClipboardWithoutReadingIt()
+    {
+        var pending = new PendingSelection();
+        bool clipboardRead = false;
+
+        Assert.True(pending.Set("picked"));
+        Assert.Equal("picked", pending.Resolve(() => { clipboardRead = true; return "clipboard"; }));
+        Assert.False(clipboardRead);
+    }
+
+    [Fact]
+    public void ArmedEntry_SurvivesRepeatedTyping()
+    {
+        var pending = new PendingSelection();
+        pending.Set("picked");
+
+        Assert.Equal("picked", pending.Resolve(() => "clipboard"));
+        Assert.Equal("picked", pending.Resolve(() => "clipboard"));
+    }
+
+    [Fact]
+    public void EmptyOrWhitespaceSelection_ArmsNothingAndClearsWhatWasArmed()
+    {
+        var pending = new PendingSelection();
+        pending.Set("picked");
+
+        Assert.False(pending.Set("  \r\n "));
+        Assert.False(pending.IsArmed);
+        Assert.Equal("clipboard", pending.Resolve(() => "clipboard"));
+    }
+
+    [Fact]
+    public void ClearedSelection_FallsBackToTheClipboard()
+    {
+        var pending = new PendingSelection();
+        pending.Set("picked");
+        pending.Clear();
+
+        Assert.Equal("clipboard", pending.Resolve(() => "clipboard"));
+    }
+
+    [Fact]
+    public void SelectionIsDroppedOnceItLeavesTheHistory()
+    {
+        var pending = new PendingSelection();
+        pending.Set("picked");
+
+        Assert.False(pending.ClearIfMissingFrom(["other", "picked"]));
+        Assert.True(pending.IsArmed);
+
+        Assert.True(pending.ClearIfMissingFrom(["other"]));
+        Assert.False(pending.IsArmed);
+        Assert.False(pending.ClearIfMissingFrom([]));
+    }
+
+    [Fact]
+    public void Confirmation_ReportsTheLengthAndHotkeyButNeverTheText()
+    {
+        var pending = new PendingSelection();
+        pending.Set("hunter2");
+
+        string message = PendingSelection.Describe(pending.Length, "Ctrl + Alt + V");
+
+        Assert.Equal(7, pending.Length);
+        Assert.Contains("7 characters", message);
+        Assert.Contains("Ctrl + Alt + V", message);
+        Assert.DoesNotContain("hunter2", message);
+    }
+
+    [Fact]
+    public void Confirmation_UsesTheSingularForOneCharacter()
+    {
+        Assert.Contains("1 character.", PendingSelection.Describe(1, "Ctrl + Alt + V"));
+    }
+}

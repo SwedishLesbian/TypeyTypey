@@ -15,6 +15,7 @@ namespace TypeyTypey;
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly ClipboardHistory _history;
+    private readonly PendingSelection _pending = new();
     private readonly ClipboardMonitor _clipboardMonitor;
     private readonly HotkeyWindow _hotkeys;
     private readonly NotifyIcon _trayIcon;
@@ -39,6 +40,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _clipboardMonitor = new ClipboardMonitor();
         _clipboardMonitor.ClipboardChanged += (_, _) => CaptureClipboard();
+
+        // An entry the user deleted, or that fell off the end of the history, must not stay armed.
+        _history.Changed += (_, _) => _pending.ClearIfMissingFrom(_history.Snapshot());
 
         _hotkeys = new HotkeyWindow();
         _hotkeys.HotkeyPressed += OnHotkeyPressed;
@@ -275,7 +279,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 try
                 {
                     if (Clipboard.ContainsText())
+                    {
+                        // Copying new text is a more recent instruction than the picker selection,
+                        // so it takes the type hotkey back to the live clipboard.
+                        _pending.Clear();
                         _history.Add(Clipboard.GetText(TextDataFormat.UnicodeText));
+                    }
                     return;
                 }
                 catch (ExternalException) when (attempt < 2)
@@ -319,24 +328,41 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        // Capture the destination before the picker takes focus.
-        IntPtr destination = WindowFocus.GetForegroundWindow();
         using var picker = new HistoryPicker(_history, _settings.Theme);
         _picker = picker;
         try
         {
             DialogResult result = picker.ShowDialog();
-            if (result == DialogResult.OK && picker.SelectedText is not null)
-                _ = StartTypingAsync(picker.SelectedText, destination);
+            if (result == DialogResult.OK)
+                ArmSelection(picker.SelectedText);
         }
         finally { _picker = null; }
     }
 
+    /// <summary>
+    /// Makes a picked history entry the text the type hotkey will send, and says so on screen.
+    /// Choosing an entry no longer types it: the user picks the text here and picks the destination
+    /// afterwards, which is the order the two hotkeys imply.
+    /// </summary>
+    private void ArmSelection(string? text)
+    {
+        if (!_pending.Set(text))
+            return;
+
+        string message = PendingSelection.Describe(_pending.Length, _settings.TypeClipboardHotkey.ToString());
+        SetStatus(message);
+        ShowBalloon(message);
+    }
+
     // ---------- typing ----------
 
+    /// <summary>
+    /// Types the picked history entry when one is armed, otherwise the current clipboard. The armed
+    /// entry survives typing, so the same value can be sent to several fields.
+    /// </summary>
     public async Task TypeCurrentClipboardAsync()
     {
-        string? text = ReadClipboardText();
+        string? text = _pending.Resolve(ReadClipboardText);
         if (text is not null)
             await StartTypingAsync(text, WindowFocus.GetForegroundWindow());
     }
