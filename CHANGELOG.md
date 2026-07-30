@@ -2,7 +2,7 @@
 
 All notable changes to TypeyTypey are documented here.
 
-## 1.0.6 - 2026-07-30
+## 1.0.5 - 2026-07-30
 
 - **New Typing Mode setting, with three modes.** Clipboard text could only ever be sent as Unicode
   input, which most Windows applications accept but a browser-hosted remote console often does not:
@@ -30,7 +30,6 @@ initial delay. A remote console configured for a different layout may still prod
 characters; nothing measurable on this machine can predict that. Windows accepting the injection is
 also not evidence that the remote system displayed the text.
 
-## 1.0.5 - unreleased
 
 - **Fixed: typing was corrupted and cut short when TypeyTypey was not running as administrator.**
   Held modifier keys leaked into the typed text, so characters reached the target as control codes

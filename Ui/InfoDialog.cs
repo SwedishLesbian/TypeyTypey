@@ -161,6 +161,13 @@ internal sealed class InfoDialog : Form
                 card.Add(dialog.Definition(binding.ToString(), $"Type once using {TypingModeText.Label(mode)}."));
         });
 
+        foreach (HelpTopic topic in HelpTopics.Operational)
+            dialog.AddSection(topic.Title, card =>
+            {
+                foreach (string paragraph in topic.Paragraphs)
+                    card.Add(dialog.Paragraph(paragraph));
+            });
+
         dialog.AddSection("Command line", card =>
         {
             foreach (CommandLineOption option in CommandLine.Options)

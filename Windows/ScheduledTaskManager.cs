@@ -55,21 +55,15 @@ internal static class ScheduledTaskManager
         string executable = Environment.ProcessPath
             ?? throw new InvalidOperationException("The application path is unavailable.");
 
-        string xmlPath = Path.Combine(Path.GetTempPath(), $"TypeyTypey-task-{Environment.ProcessId}.xml");
-        try
-        {
-            // schtasks only accepts a Unicode task definition; a UTF-8 file is rejected outright.
-            File.WriteAllText(xmlPath, BuildTaskXml(mode, executable, CurrentUserSid()), Encoding.Unicode);
-            (int exitCode, string output) = RunSchtasks("/Create", "/TN", TaskName, "/XML", xmlPath, "/F");
-            if (exitCode != 0)
-                return (false, $"Windows refused to create the TypeyTypey scheduled task.\n\n{output}");
-        }
-        finally
-        {
-            try { File.Delete(xmlPath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
+        RegistrationOutcome outcome = Register(BuildTaskXml(mode, executable, CurrentUserSid()), SubmitTaskXml);
+        if (!outcome.Succeeded)
+            return (false, $"Windows refused to create the TypeyTypey scheduled task.\n\n{outcome.Output}");
 
         string startupNote = DisableStartupEntry();
+        if (outcome.RemovedNodes.Count > 0)
+            startupNote = $"\n\nThis version of Windows rejected {string.Join(" and ", outcome.RemovedNodes)}; " +
+                          $"the task was created without {(outcome.RemovedNodes.Count == 1 ? "it" : "them")}, " +
+                          "which does not change how it runs." + startupNote;
         return mode == AdminTaskMode.System
             ? (true, $"Created the scheduled task \"{TaskName}\". TypeyTypey will start at boot as the SYSTEM account.\n\n" +
                      "SYSTEM starts in session 0, which has no desktop: the tray icon will not appear and the hotkeys will not reach your session. " +
@@ -106,6 +100,70 @@ internal static class ScheduledTaskManager
                                       or SecurityException or IOException)
         {
             return $"\n\nTurn off Start with Windows in Settings as well, or two copies will start at sign-in. ({ex.Message})";
+        }
+    }
+
+    /// <summary>What a registration attempt ended up doing.</summary>
+    internal readonly record struct RegistrationOutcome(bool Succeeded, string Output, IReadOnlyList<string> RemovedNodes);
+
+    /// <summary>
+    /// Hands one task definition to the scheduler and reports what it said. The seam that lets the
+    /// retry logic below be tested without a scheduler, an administrator token, or a particular
+    /// Windows version.
+    /// </summary>
+    internal delegate (int ExitCode, string Output) SubmitTaskDefinition(string xml);
+
+    /// <summary>
+    /// Registers <paramref name="xml"/>, retrying without an optional element when the scheduler
+    /// rejects the document for containing one it does not know.
+    ///
+    /// Bounded by <see cref="TaskXmlCompatibility.MaximumAttempts"/> and by the allowlist: an
+    /// element that is not removable ends the loop with the scheduler's own error preserved, rather
+    /// than being stripped to make the command succeed. The same node is never removed twice —
+    /// removal either changes the document or the loop stops — so it cannot spin.
+    /// </summary>
+    internal static RegistrationOutcome Register(string xml, SubmitTaskDefinition submit)
+    {
+        var removed = new List<string>();
+        string current = xml;
+
+        for (int attempt = 1; ; attempt++)
+        {
+            (int exitCode, string output) = submit(current);
+            if (exitCode == 0)
+                return new RegistrationOutcome(true, output, removed);
+
+            if (attempt >= TaskXmlCompatibility.MaximumAttempts)
+                return new RegistrationOutcome(false, output, removed);
+
+            string? node = TaskXmlCompatibility.UnexpectedNodeName(output, current);
+            if (!TaskXmlCompatibility.TryRemoveNode(current, node, out string reduced))
+                return new RegistrationOutcome(false, output, removed);
+
+            removed.Add(node!);
+            current = reduced;
+        }
+    }
+
+    /// <summary>
+    /// Writes the definition to a temporary file and runs <c>schtasks</c> against it. The file is
+    /// deleted on every path, including the failure that triggers a retry, so a rejected attempt
+    /// leaves nothing behind.
+    /// </summary>
+    private static (int ExitCode, string Output) SubmitTaskXml(string xml)
+    {
+        string xmlPath = Path.Combine(Path.GetTempPath(), $"TypeyTypey-task-{Environment.ProcessId}-{Guid.NewGuid():N}.xml");
+        try
+        {
+            // schtasks only accepts a Unicode task definition; a UTF-8 file is rejected outright.
+            File.WriteAllText(xmlPath, xml, Encoding.Unicode);
+            return RunSchtasks("/Create", "/TN", TaskName, "/XML", xmlPath, "/F");
+        }
+        finally
+        {
+            try { File.Delete(xmlPath); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 
@@ -158,8 +216,6 @@ internal static class ScheduledTaskManager
                 <Enabled>true</Enabled>
                 <Hidden>false</Hidden>
                 <RunOnlyIfIdle>false</RunOnlyIfIdle>
-                <DisallowStartOnRemoteAppSession>false</DisallowStartOnRemoteAppSession>
-                <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
                 <WakeToRun>false</WakeToRun>
                 <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
                 <Priority>7</Priority>

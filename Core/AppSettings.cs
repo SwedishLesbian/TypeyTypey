@@ -13,7 +13,7 @@ internal sealed class AppSettings
     /// </summary>
     public HotkeyBinding StopTypingHotkey { get; set; } = new() { Key = Keys.X };
     /// <summary>
-    /// How text is turned into keystrokes. Absent from settings files written before v1.0.6, which
+    /// How text is turned into keystrokes. Absent from settings files written by earlier builds, which
     /// deserialize to <see cref="TypingMode.Unicode"/> — the behaviour those builds had — so an
     /// upgrade never silently changes how an existing user's typing reaches its target.
     /// </summary>

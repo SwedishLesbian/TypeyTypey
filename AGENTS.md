@@ -169,7 +169,7 @@ size, `AppSettings.Normalize` clamps, theme persistence and settings-file compat
 monitor-clamping policy, `--admintask` parsing, scheduled-task XML and picker selection rules.
 v1.0.5 adds the modifier-release decision rule, three-way hotkey validation, working-area fitting,
 `--help` parsing and the product metadata About reads, and typing-mode planning, key-event
-ordering, mode persistence and override-hotkey validation. 177 tests as of v1.0.6, from the Release
+ordering, mode persistence and override-hotkey validation. 177 tests as of v1.0.5, from the Release
 run on windows-latest rather than counted by hand.
 
 `HelpCommandTests.EveryDocumentedOption_IsAcceptedByTheParser` is worth keeping. It walks
@@ -315,11 +315,11 @@ window it does not outrank, with the hotkey held down at the moment of the press
 Also unverified at runtime: the Stop typing hotkey actually cancelling a run in progress, the
 five-second modifier timeout message, Light and high-contrast rendering of the new cards, and About.
 
-## 9b. Typing Mode — decisions and limits (v1.0.6)
+## 9b. Typing Mode — decisions and limits (v1.0.5)
 
 ### Why the default is Unicode Input, not Automatic
 
-`TypingMode.Unicode` is persisted as `0`, so a settings file written before v1.0.6 — which has no
+`TypingMode.Unicode` is persisted as `0`, so a settings file written before v1.0.5 — which has no
 such property — deserializes to the behaviour that build had. That is deliberate and is the whole
 migration: no version check, no upgrade flag, no way for the two to disagree. New installations get
 Unicode Input as well. Distinguishing "upgraded" from "new" would need a marker written by a build
@@ -364,39 +364,40 @@ once the batch carrying the key-ups is fully accepted, so a partial `SendInput` 
 recorded as held. `TypePlanAsync` releases in a `finally`, and `ExitApplication` and `Dispose`
 release again in case the process ends before that unwinds.
 
-### Not verified at runtime **[BLOCKING for a release]**
+### Runtime validation status
 
-Implemented on a Linux container that cannot build this project (§4). Planning, key-event ordering
-and the settings rules have unit coverage — 177 tests in all, 69 of which run under
-`tools/linux-check`.
-**Nothing below has been observed.** Tracked in #16.
+**Confirmed by the maintainer, 2026-07-30, against the published executable:** Physical and
+Automatic both type correctly into an iDRAC password field. That is the defect in #16 closed at its
+primary use case, and the reason v1.0.5 was released.
 
-| Target | Unicode Input | Physical Keypresses | Automatic |
-|---|---|---|---|
-| Notepad | | | |
-| Windows Terminal / PowerShell | | | |
-| `mstsc.exe` | | | |
-| Browser-hosted iDRAC/VNC/KVM | | | |
-| Chrome or Edge address bar | | | |
+Three findings came out of that pass and are documented in the Help window rather than fixed,
+because each is expected behaviour rather than a defect:
 
-Type each of these in each mode:
+- Unicode mode produced lowercase text in iDRAC — the console never receives modifier state.
+- Physical mode triggered Chrome tab-group behaviour: a modifier-dependent character is
+  indistinguishable from the shortcut using the same keys, and the target decides which it is.
+- An elevated Windows Terminal blocks an unelevated TypeyTypey from typing into *any* Windows
+  Terminal window, including apparently unelevated tabs. `conhost.exe` was unaffected. Recorded as a
+  Windows Terminal integrity interaction, not a TypeyTypey defect.
 
-- `AaZz019!@#_-+=[]{};:'",.<>/?\|`~` — case and punctuation. Expect exact reproduction in all three
-  modes in ordinary applications; this is the string that proves #16 in a console.
-- `TypeyTypey ™ café ✓ 😀` — expect Unicode Input to type it whole; Physical Keypresses to refuse it
-  naming position 12 (U+2122) on a US layout and type **nothing**; Automatic to type it whole, with
-  the ASCII physically and the rest as Unicode.
+**Still unobserved.** Tray submenu rendering in either theme, the Settings card, the Help window,
+override hotkeys, and scheduled-task creation on the affected system. The theming fix and the
+scheduler compatibility path have unit coverage for their decision rules and none for their
+appearance or for Task Scheduler itself; no agent has seen either run.
 
-Also confirm:
-
-- [ ] Cancellation during the startup delay, mid-run, and during a shifted character — and that no
-      modifier is left down afterwards (test by typing a lowercase letter immediately after).
-- [ ] Switching mode from the tray submenu takes effect on the next run, ticks the right item, and
-      survives a restart.
-- [ ] Settings dropdown and tray submenu always agree, in both directions.
-- [ ] An override hotkey types once in its mode and leaves the saved mode alone.
-- [ ] Override hotkey duplicating the primary is refused at save with a clear message.
-- [ ] A non-US layout: a character reachable only through AltGr.
+- [ ] Typing Mode submenu readable in light mode, and in dark mode, including the tick beside the
+      active mode and any disabled item.
+- [ ] Help window shows the five operational sections and is readable in both themes.
+- [ ] Unicode, Physical and Automatic each type `AaZz019!@#_-+=[]{};:'",.<>/?\|`~` correctly into
+      Notepad.
+- [ ] `TypeyTypey ™ café ✓ 😀`: Unicode types it whole; Physical refuses it naming position 12
+      (U+2122) and types nothing; Automatic types it whole.
+- [ ] Startup clipboard: text copied before launch types with the hotkey but is absent from history.
+- [ ] History is empty after a restart, and after an elevation restart.
+- [ ] Settings persist across a restart, and the tray tick matches the Settings dropdown.
+- [ ] Unelevated TypeyTypey cannot type into an elevated window.
+- [ ] `--admintask` creates the task on the system that previously rejected the XML.
+- [ ] Cancellation mid-run and during a shifted character leaves no modifier down.
 
 ## 10. Escalate rather than decide
 

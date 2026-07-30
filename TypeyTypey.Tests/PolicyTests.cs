@@ -729,3 +729,90 @@ public sealed class TypingModeOverrideHotkeyTests
             StringComparison.OrdinalIgnoreCase);
     }
 }
+
+public sealed class MenuThemingTests
+{
+    /// <summary>
+    /// A menu shaped like the tray menu: a plain item, a submenu with children, and a disabled item.
+    /// </summary>
+    private static ContextMenuStrip BuildMenu(out ToolStripMenuItem child, out ToolStripMenuItem disabled)
+    {
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("Type Current Clipboard");
+
+        var parent = new ToolStripMenuItem("Typing Mode");
+        child = new ToolStripMenuItem("Automatic") { Checked = true };
+        disabled = new ToolStripMenuItem("Unicode Input") { Enabled = false };
+        parent.DropDownItems.Add(child);
+        parent.DropDownItems.Add(disabled);
+        menu.Items.Add(parent);
+        return menu;
+    }
+
+    [Fact]
+    public void SubmenuItemsAreThemedAndNotLeftAtTheSystemDefault()
+    {
+        // The defect: only top-level items were painted, so expanding Typing Mode showed dark text
+        // on the dark drop-down it inherited.
+        using ContextMenuStrip menu = BuildMenu(out ToolStripMenuItem child, out _);
+        ThemePalette dark = ThemeManager.PaletteFor(EffectiveTheme.Dark);
+
+        ThemeManager.ApplyPaletteToMenu(menu, dark);
+
+        Assert.Equal(dark.Text, child.ForeColor);
+        Assert.Equal(dark.Window, child.BackColor);
+    }
+
+    [Fact]
+    public void TheSubmenuDropDownItselfIsPainted()
+    {
+        // The item's colours are not enough: the drop-down is a separate ToolStrip and draws the
+        // background behind them.
+        using ContextMenuStrip menu = BuildMenu(out _, out _);
+        ThemePalette dark = ThemeManager.PaletteFor(EffectiveTheme.Dark);
+
+        ThemeManager.ApplyPaletteToMenu(menu, dark);
+
+        var parent = (ToolStripMenuItem)menu.Items[1];
+        Assert.Equal(dark.Window, parent.DropDown.BackColor);
+        Assert.Equal(dark.Text, parent.DropDown.ForeColor);
+        Assert.NotNull(parent.DropDown.Renderer);
+    }
+
+    [Fact]
+    public void ADisabledSubmenuItemIsThemedToo()
+    {
+        using ContextMenuStrip menu = BuildMenu(out _, out ToolStripMenuItem disabled);
+        ThemePalette dark = ThemeManager.PaletteFor(EffectiveTheme.Dark);
+
+        ThemeManager.ApplyPaletteToMenu(menu, dark);
+
+        Assert.Equal(dark.Window, disabled.BackColor);
+    }
+
+    [Fact]
+    public void LightThemeGetsTheLightPaletteRatherThanTheDarkOne()
+    {
+        using ContextMenuStrip menu = BuildMenu(out ToolStripMenuItem child, out _);
+        ThemePalette light = ThemeManager.PaletteFor(EffectiveTheme.Light);
+
+        ThemeManager.ApplyPaletteToMenu(menu, light);
+
+        Assert.Equal(light.Text, child.ForeColor);
+        Assert.Equal(light.Window, child.BackColor);
+        Assert.NotEqual(ThemeManager.PaletteFor(EffectiveTheme.Dark).Window, child.BackColor);
+    }
+
+    [Fact]
+    public void TheTwoPalettesDifferEnoughToRead()
+    {
+        // A guard on the palettes themselves: identical text and window colours would make every
+        // assertion above pass while the menu stayed unreadable.
+        foreach (EffectiveTheme theme in new[] { EffectiveTheme.Light, EffectiveTheme.Dark })
+        {
+            ThemePalette palette = ThemeManager.PaletteFor(theme);
+            Assert.NotEqual(palette.Window, palette.Text);
+            Assert.NotEqual(palette.Window, palette.DisabledText);
+        }
+    }
+}

@@ -4,7 +4,7 @@ namespace TypeyTypey;
 /// How TypeyTypey turns clipboard text into keyboard input.
 ///
 /// The numeric values are persisted. <see cref="Unicode"/> is deliberately zero so that a settings
-/// file written before v1.0.6 — which has no TypingMode property at all — deserializes to the
+/// file written before v1.0.5 — which has no TypingMode property at all — deserializes to the
 /// behaviour that build had. See AGENTS.md §9b for why the default is not Automatic.
 /// </summary>
 internal enum TypingMode

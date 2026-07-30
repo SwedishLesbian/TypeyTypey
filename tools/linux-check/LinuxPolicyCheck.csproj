@@ -33,6 +33,9 @@
     <Compile Include="../../App/AppCommand.cs" Link="AppCommand.cs" />
     <Compile Include="../../Windows/ScheduledTaskManager.cs" Link="ScheduledTaskManager.cs" />
     <Compile Include="../../TypeyTypey.Tests/SelectionAndTaskTests.cs" Link="SelectionAndTaskTests.cs" />
+    <Compile Include="../../Core/TaskXmlCompatibility.cs" Link="TaskXmlCompatibility.cs" />
+    <Compile Include="../../Core/HelpTopics.cs" Link="HelpTopics.cs" />
+    <Compile Include="../../TypeyTypey.Tests/TaskCompatibilityTests.cs" Link="TaskCompatibilityTests.cs" />
   </ItemGroup>
 
 </Project>

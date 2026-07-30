@@ -179,15 +179,36 @@ internal static class ThemeManager
         if (ShouldUseSystemPalette)
             return;
 
-        EffectiveTheme effective = Resolve(preference);
-        ThemePalette palette = PaletteFor(effective);
+        ApplyPaletteToMenu(menu, PaletteFor(Resolve(preference)));
+    }
+
+    /// <summary>
+    /// Paints a menu and every submenu beneath it. Split from <see cref="ApplyToMenu"/> so it can be
+    /// tested against a chosen palette without depending on the machine's theme or high-contrast
+    /// setting.
+    ///
+    /// The recursion is the point. A submenu is not a child control of its parent menu: it is a
+    /// separate <see cref="ToolStripDropDown"/> with its own back colour, fore colour and renderer.
+    /// Painting only the top-level items left the Typing Mode submenu with the system defaults —
+    /// dark text on the dark background it inherited, which is unreadable.
+    /// </summary>
+    internal static void ApplyPaletteToMenu(ToolStrip menu, ThemePalette palette)
+    {
         menu.BackColor = palette.Window;
         menu.ForeColor = palette.Text;
-        menu.Renderer = new ToolStripProfessionalRenderer(new MenuColours(palette));
-        foreach (ToolStripItem item in menu.Items)
+        menu.Renderer = new MenuRenderer(palette);
+        ApplyPaletteToItems(menu.Items, palette);
+    }
+
+    private static void ApplyPaletteToItems(ToolStripItemCollection items, ThemePalette palette)
+    {
+        foreach (ToolStripItem item in items)
         {
             item.BackColor = palette.Window;
             item.ForeColor = palette.Text;
+
+            if (item is ToolStripDropDownItem { HasDropDownItems: true } parent)
+                ApplyPaletteToMenu(parent.DropDown, palette);
         }
     }
 
@@ -216,8 +237,35 @@ internal static class ThemeManager
     [DllImport("dwmapi.dll", SetLastError = true)]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
+    /// <summary>
+    /// Draws the text and the submenu arrow itself, because the base renderer does not use the
+    /// item's <c>ForeColor</c> for either. Disabled text comes from <c>SystemColors.GrayText</c> and
+    /// the arrow from <c>SystemColors.ControlText</c> — both fixed, and both near-invisible on a
+    /// dark menu.
+    /// </summary>
+    private sealed class MenuRenderer(ThemePalette palette) : ToolStripProfessionalRenderer(new MenuColours(palette))
+    {
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+        {
+            e.TextColor = e.Item.Enabled ? palette.Text : palette.DisabledText;
+            base.OnRenderItemText(e);
+        }
+
+        protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
+        {
+            e.ArrowColor = e.Item.Enabled ? palette.Text : palette.DisabledText;
+            base.OnRenderArrow(e);
+        }
+    }
+
     private sealed class MenuColours(ThemePalette palette) : ProfessionalColorTable
     {
+        // The tick beside the active typing mode sits in this box. Left at its default it is a pale
+        // highlight that swallows the glyph on a dark menu.
+        public override Color CheckBackground => palette.ButtonFace;
+        public override Color CheckSelectedBackground => palette.Accent;
+        public override Color CheckPressedBackground => palette.Accent;
+
         public override Color MenuItemSelected => palette.ButtonFace;
         public override Color MenuItemSelectedGradientBegin => palette.ButtonFace;
         public override Color MenuItemSelectedGradientEnd => palette.ButtonFace;
