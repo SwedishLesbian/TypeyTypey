@@ -7,21 +7,28 @@ namespace TypeyTypey;
 internal sealed class SettingsForm : Form
 {
     private readonly TrayApplicationContext _context;
-    private readonly HotkeyControls _typeHotkey = new("Type Clipboard");
-    private readonly HotkeyControls _historyHotkey = new("Clipboard History");
-    private readonly NumericUpDown _characterDelay = new() { Minimum = 0, Maximum = 1_000, Increment = 5, Width = 90 };
-    private readonly NumericUpDown _initialDelay = new() { Minimum = 0, Maximum = 10_000, Increment = 50, Width = 90 };
-    private readonly CheckBox _clearClipboard = new() { Text = "Clear clipboard after typing", AutoSize = true };
-    private readonly CheckBox _monitoringEnabled = new() { Text = "Enable clipboard monitoring", AutoSize = true };
-    private readonly NumericUpDown _maximumHistory = new() { Minimum = 1, Maximum = 500, Width = 90 };
+    private readonly HotkeyControls _typeHotkey = new("Type clipboard");
+    private readonly HotkeyControls _historyHotkey = new("Clipboard history");
+    private readonly HotkeyControls _stopHotkey = new("Stop typing");
+    private readonly NumericUpDown _characterDelay = new() { Minimum = 0, Maximum = 1_000, Increment = 5, Width = 84 };
+    private readonly NumericUpDown _initialDelay = new() { Minimum = 0, Maximum = 10_000, Increment = 50, Width = 84 };
+    private readonly CheckBox _clearClipboard = new() { Text = "Clear the clipboard after typing", AutoSize = true };
+    private readonly CheckBox _monitoringEnabled = new() { Text = "Record copied text in the history", AutoSize = true };
+    private readonly NumericUpDown _maximumHistory = new() { Minimum = 1, Maximum = 500, Width = 84 };
     private readonly CheckBox _startWithWindows = new() { Text = "Start with Windows", AutoSize = true };
-    private readonly CheckBox _runAsAdministrator = new() { Text = "Run as administrator (requests UAC approval)", AutoSize = true };
+    private readonly CheckBox _runAsAdministrator = new() { Text = "Run as administrator", AutoSize = true };
     private readonly ComboBox _theme = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+    private readonly ComboBox _typingMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+    private readonly MutedLabel _typingModeCaption = new() { AutoSize = true, Margin = new Padding(0, UiKit.SpaceTight, 0, 0) };
+    private readonly CheckBox _overridesEnabled = new() { Text = "Enable typing-mode override hotkeys", AutoSize = true };
+    private readonly HotkeyControls _automaticOverride = new("Automatic", allowUnassigned: true);
+    private readonly HotkeyControls _unicodeOverride = new("Unicode Input", allowUnassigned: true);
+    private readonly HotkeyControls _physicalOverride = new("Physical Keypresses", allowUnassigned: true);
     private readonly Button _save = new() { Text = "Save settings", AutoSize = true };
     private readonly Button _typeNow = new() { Text = "Type current clipboard", AutoSize = true };
-    private readonly Button _clearHistory = new() { Text = "Clear history", AutoSize = true };
-    private readonly Label _status = new() { AutoSize = true };
-    private readonly Label _elevationNotice = new() { AutoSize = true, Visible = false, Margin = new Padding(0, 6, 0, 0) };
+    private readonly Button _clearHistory = new() { Text = "Clear history now", AutoSize = true };
+    private readonly MutedLabel _status = new() { AutoSize = true };
+    private readonly Label _elevationNotice = new() { AutoSize = true };
 
     public SettingsForm(TrayApplicationContext context, Icon icon)
     {
@@ -99,7 +106,7 @@ internal sealed class SettingsForm : Form
         ThemeManager.Apply(this, theme);
         // Apply paints every label with the standard text colour, so the accent is restored after.
         // High contrast keeps the user's own palette untouched.
-        if (_elevationNotice.Visible && !ThemeManager.ShouldUseSystemPalette)
+        if (_elevationNotice.Parent is not null && !ThemeManager.ShouldUseSystemPalette)
             _elevationNotice.ForeColor = ThemeManager.PaletteFor(ThemeManager.Resolve(theme)).Accent;
         Refresh();
     }
@@ -118,62 +125,167 @@ internal sealed class SettingsForm : Form
         Location = location.Value;
     }
 
+    /// <summary>
+    /// A page of cards under a docked action bar, rather than a stack of group boxes. The bar is
+    /// outside the scrolling region so Save stays reachable at any window size.
+    /// </summary>
     private void BuildLayout()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, AutoScroll = true };
-        root.Controls.Add(Section("Hotkeys", _typeHotkey, _historyHotkey));
-        root.Controls.Add(Section("Typing", NumberRow("Character delay", _characterDelay, "ms"), NumberRow("Initial delay", _initialDelay, "ms"), _clearClipboard));
-        root.Controls.Add(Section("Clipboard", _monitoringEnabled, NumberRow("Maximum history entries", _maximumHistory), _clearHistory));
-        root.Controls.Add(Section("Appearance", LabelledRow("Theme", _theme)));
-        root.Controls.Add(Section("Startup", _startWithWindows, _runAsAdministrator));
-        root.Controls.Add(Section("About", new Label
-        {
-            Text = $"TypeyTypey v{VersionInfo.Display}\nTypes clipboard-derived text with native Unicode input. Clipboard history is memory-only.",
-            AutoSize = true
-        }));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var actions = new FlowLayoutPanel { AutoSize = true };
-        actions.Controls.AddRange([_save, _typeNow]);
-        root.Controls.Add(actions);
-        root.Controls.Add(_status);
+        var page = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            AutoScroll = true,
+            Padding = new Padding(UiKit.PagePadding, UiKit.SpaceWide, UiKit.PagePadding, UiKit.PagePadding)
+        };
+
+        page.Controls.Add(Header());
+        page.Controls.Add(UiKit.Eyebrow("Hotkeys"));
+        page.Controls.Add(Card(
+            _typeHotkey,
+            _historyHotkey,
+            _stopHotkey,
+            UiKit.Caption("Each hotkey works anywhere in Windows. Stop typing cancels a run in progress.")));
+
+        page.Controls.Add(UiKit.Eyebrow("Typing"));
+        page.Controls.Add(Card(
+            LabelledRow("Typing mode", _typingMode),
+            _typingModeCaption,
+            NumberRow("Character delay", _characterDelay, "ms"),
+            UiKit.Caption("Pause between keystrokes. Raise it if the target drops characters."),
+            NumberRow("Wait before typing", _initialDelay, "ms"),
+            UiKit.Caption("Time to click into the window you want the text to land in."),
+            _clearClipboard));
+
+        page.Controls.Add(UiKit.Eyebrow("Clipboard history"));
+        page.Controls.Add(Card(
+            _monitoringEnabled,
+            NumberRow("Keep at most", _maximumHistory, "entries"),
+            UiKit.Caption("History is held in memory only and is discarded when TypeyTypey exits."),
+            _clearHistory));
+
+        page.Controls.Add(UiKit.Eyebrow("Typing-mode override hotkeys"));
+        page.Controls.Add(Card(
+            _overridesEnabled,
+            UiKit.Caption("Advanced. Each one types once in its own mode without changing the mode above. Leave any of them unset."),
+            _automaticOverride,
+            _unicodeOverride,
+            _physicalOverride));
+
+        page.Controls.Add(UiKit.Eyebrow("Appearance"));
+        page.Controls.Add(Card(LabelledRow("Theme", _theme)));
+
+        page.Controls.Add(UiKit.Eyebrow("Startup"));
+        page.Controls.Add(Card(
+            _startWithWindows,
+            _runAsAdministrator,
+            UiKit.Caption("Administrator mode asks for UAC approval and is needed to type into elevated windows.")));
 
         // Elevation is otherwise invisible, and it is the whole point of the administrator setting.
         // Shown only when elevated, so the normal case stays uncluttered.
         if (PrivilegeManager.IsElevated())
         {
-            _elevationNotice.Text = "Running as administrator — can type into elevated applications.";
-            _elevationNotice.Visible = true;
+            _elevationNotice.Text = "Running as administrator. TypeyTypey can type into elevated windows.";
+            _elevationNotice.Margin = new Padding(0, UiKit.SpaceSection, 0, 0);
+            CardPanel notice = Card(_elevationNotice);
+            notice.AccentEdge = SystemColors.Highlight;
+            notice.Margin = new Padding(0, UiKit.SpaceSection, 0, 0);
+            page.Controls.Add(notice);
         }
-        root.Controls.Add(_elevationNotice);
+
+        root.Controls.Add(page, 0, 0);
+        root.Controls.Add(ActionBar(), 0, 1);
         Controls.Add(root);
 
         foreach (ThemeChoice choice in ThemeChoice.All)
             _theme.Items.Add(choice);
+
+        foreach (TypingMode mode in TypingModeText.InDisplayOrder)
+            _typingMode.Items.Add(new TypingModeChoice(mode));
+        _typingMode.SelectedIndexChanged += (_, _) => UpdateTypingModeCaption();
+        _overridesEnabled.CheckedChanged += (_, _) => UpdateOverrideState();
     }
 
-    private static GroupBox Section(string title, params Control[] controls)
+    private static Control Header()
     {
-        var box = new GroupBox { Text = title, AutoSize = true, Dock = DockStyle.Top, Padding = new Padding(10) };
-        var content = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        var stack = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Margin = new Padding(0)
+        };
+        stack.Controls.Add(new Label { Text = "TypeyTypey", Font = UiKit.Title, AutoSize = true, Margin = new Padding(0) });
+        stack.Controls.Add(new MutedLabel
+        {
+            Text = $"Version {VersionInfo.Display}",
+            Font = UiKit.Helper,
+            AutoSize = true,
+            Margin = new Padding(0, UiKit.SpaceTight, 0, 0)
+        });
+        return stack;
+    }
+
+    private Control ActionBar()
+    {
+        var host = new Panel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = new Padding(0) };
+        var bar = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 1,
+            AutoSize = true,
+            Padding = new Padding(UiKit.PagePadding, UiKit.SpaceWide, UiKit.PagePadding, UiKit.SpaceWide)
+        };
+
+        var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false, Margin = new Padding(0) };
+        _save.Margin = new Padding(0, 0, UiKit.Space, 0);
+        buttons.Controls.AddRange([_save, _typeNow]);
+
+        _status.Margin = new Padding(0, UiKit.Space, 0, 0);
+        bar.Controls.Add(buttons);
+        bar.Controls.Add(_status);
+
+        // Added after the bar so the rule docks above it, anchoring the bar to the scrolling page.
+        host.Controls.Add(bar);
+        host.Controls.Add(new SeparatorPanel());
+        return host;
+    }
+
+    private static CardPanel Card(params Control[] controls)
+    {
+        var card = new CardPanel { Dock = DockStyle.Top };
+        var content = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Margin = new Padding(0)
+        };
         content.Controls.AddRange(controls);
-        box.Controls.Add(content);
-        return box;
+        card.Controls.Add(content);
+        return card;
     }
 
     private static FlowLayoutPanel NumberRow(string label, Control numeric, string suffix = "")
     {
-        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        row.Controls.Add(new Label { Text = label + ":", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, UiKit.SpaceTight) };
+        row.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(0, 5, UiKit.Space, 0) });
         row.Controls.Add(numeric);
         if (!string.IsNullOrEmpty(suffix))
-            row.Controls.Add(new Label { Text = suffix, AutoSize = true, Margin = new Padding(4, 6, 0, 0) });
+            row.Controls.Add(new MutedLabel { Text = suffix, AutoSize = true, Margin = new Padding(UiKit.SpaceTight, 5, 0, 0) });
         return row;
     }
 
     private static FlowLayoutPanel LabelledRow(string label, Control control)
     {
-        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        row.Controls.Add(new Label { Text = label + ":", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+        row.Controls.Add(new Label { Text = label, AutoSize = true, Margin = new Padding(0, 5, UiKit.Space, 0) });
         row.Controls.Add(control);
         return row;
     }
@@ -182,6 +294,7 @@ internal sealed class SettingsForm : Form
     {
         _typeHotkey.SetBinding(settings.TypeClipboardHotkey);
         _historyHotkey.SetBinding(settings.HistoryHotkey);
+        _stopHotkey.SetBinding(settings.StopTypingHotkey);
         _characterDelay.Value = settings.CharacterDelayMs;
         _initialDelay.Value = settings.InitialDelayMs;
         _clearClipboard.Checked = settings.ClearClipboardAfterTyping;
@@ -190,7 +303,31 @@ internal sealed class SettingsForm : Form
         _startWithWindows.Checked = settings.StartWithWindows;
         _runAsAdministrator.Checked = settings.RunAsAdministrator;
         _theme.SelectedItem = ThemeChoice.All.FirstOrDefault(choice => choice.Value == settings.Theme) ?? ThemeChoice.All[0];
+        _typingMode.SelectedItem = _typingMode.Items.Cast<TypingModeChoice>().FirstOrDefault(choice => choice.Value == settings.TypingMode);
+        _overridesEnabled.Checked = settings.TypingModeOverridesEnabled;
+        _automaticOverride.SetOptionalBinding(settings.AutomaticModeHotkey);
+        _unicodeOverride.SetOptionalBinding(settings.UnicodeModeHotkey);
+        _physicalOverride.SetOptionalBinding(settings.PhysicalModeHotkey);
+        UpdateTypingModeCaption();
+        UpdateOverrideState();
     }
+
+    /// <summary>The caption explains the selected mode, so the dropdown does not have to be self-explanatory.</summary>
+    private void UpdateTypingModeCaption() =>
+        _typingModeCaption.Text = TypingModeText.Description(SelectedTypingMode());
+
+    /// <summary>
+    /// The override rows are greyed rather than hidden when the feature is off. Hiding them would
+    /// resize the card as the box is ticked, moving everything below it under the pointer.
+    /// </summary>
+    private void UpdateOverrideState()
+    {
+        foreach (HotkeyControls row in new[] { _automaticOverride, _unicodeOverride, _physicalOverride })
+            row.SetEnabledState(_overridesEnabled.Checked);
+    }
+
+    private TypingMode SelectedTypingMode() =>
+        _typingMode.SelectedItem is TypingModeChoice choice ? choice.Value : TypingMode.Unicode;
 
     private void SaveSettings()
     {
@@ -198,6 +335,7 @@ internal sealed class SettingsForm : Form
         {
             TypeClipboardHotkey = _typeHotkey.GetBinding(),
             HistoryHotkey = _historyHotkey.GetBinding(),
+            StopTypingHotkey = _stopHotkey.GetBinding(),
             CharacterDelayMs = (int)_characterDelay.Value,
             InitialDelayMs = (int)_initialDelay.Value,
             ClearClipboardAfterTyping = _clearClipboard.Checked,
@@ -206,6 +344,11 @@ internal sealed class SettingsForm : Form
             StartWithWindows = _startWithWindows.Checked,
             RunAsAdministrator = _runAsAdministrator.Checked,
             Theme = SelectedTheme(),
+            TypingMode = SelectedTypingMode(),
+            TypingModeOverridesEnabled = _overridesEnabled.Checked,
+            AutomaticModeHotkey = _automaticOverride.GetOptionalBinding(),
+            UnicodeModeHotkey = _unicodeOverride.GetOptionalBinding(),
+            PhysicalModeHotkey = _physicalOverride.GetOptionalBinding(),
             WindowLeft = Location.X,
             WindowTop = Location.Y
         };
@@ -243,6 +386,12 @@ internal sealed class SettingsForm : Form
         _context.ShowBalloon("Settings saved.");
     }
 
+    /// <summary>Wraps the mode so the combo shows its shared label rather than the enum name.</summary>
+    private sealed record TypingModeChoice(TypingMode Value)
+    {
+        public override string ToString() => TypingModeText.Label(Value);
+    }
+
     /// <summary>Pairs the persisted enum with its display string so the string is never stored.</summary>
     private sealed record ThemeChoice(AppTheme Value, string Label)
     {
@@ -264,14 +413,53 @@ internal sealed class SettingsForm : Form
         private readonly CheckBox _win = new() { Text = "Win", AutoSize = true };
         private readonly ComboBox _key = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
 
-        public HotkeyControls(string label)
+        private readonly bool _allowUnassigned;
+
+        /// <summary>
+        /// <paramref name="allowUnassigned"/> adds a "(not set)" key, which is how an override
+        /// hotkey says it is not bound. The three primary hotkeys must always have a key, so they
+        /// leave it off and the entry never appears for them.
+        /// </summary>
+        public HotkeyControls(string label, bool allowUnassigned = false)
         {
+            _allowUnassigned = allowUnassigned;
             AutoSize = true;
             WrapContents = false;
-            Controls.Add(new Label { Text = label + ":", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+            Margin = new Padding(0, 0, 0, UiKit.Space);
+            // A fixed label width lines the hotkey rows up into a column without a table.
+            Controls.Add(new Label { Text = label, AutoSize = false, Width = 148, Margin = new Padding(0, 5, UiKit.Space, 0) });
+            foreach (CheckBox modifier in new[] { _ctrl, _alt, _shift, _win })
+                modifier.Margin = new Padding(0, 4, UiKit.Space, 0);
+            _key.Margin = new Padding(UiKit.SpaceTight, 1, 0, 0);
             Controls.AddRange([_ctrl, _alt, _shift, _win, _key]);
+            if (allowUnassigned)
+                _key.Items.Add(UnassignedKey);
             foreach (Keys key in KeysList())
                 _key.Items.Add(key);
+        }
+
+        /// <summary>The "(not set)" entry. Boxed as an object so the combo can hold it beside Keys values.</summary>
+        private static readonly object UnassignedKey = "(not set)";
+
+        /// <summary>Reads an override binding, or null when the user left it unassigned.</summary>
+        public HotkeyBinding? GetOptionalBinding() =>
+            _key.SelectedItem is Keys ? GetBinding() : null;
+
+        public void SetOptionalBinding(HotkeyBinding? binding)
+        {
+            if (binding is null)
+            {
+                _ctrl.Checked = _alt.Checked = _shift.Checked = _win.Checked = false;
+                _key.SelectedItem = UnassignedKey;
+                return;
+            }
+            SetBinding(binding);
+        }
+
+        public void SetEnabledState(bool enabled)
+        {
+            foreach (Control control in Controls)
+                control.Enabled = enabled;
         }
 
         public void SetBinding(HotkeyBinding binding)
@@ -281,7 +469,7 @@ internal sealed class SettingsForm : Form
             _shift.Checked = binding.Shift;
             _win.Checked = binding.Win;
             _key.SelectedItem = binding.Key;
-            if (_key.SelectedIndex < 0) _key.SelectedIndex = 0;
+            if (_key.SelectedIndex < 0) _key.SelectedIndex = _allowUnassigned ? 1 : 0;
         }
 
         public HotkeyBinding GetBinding() => new()

@@ -10,8 +10,17 @@ internal enum AppCommand
     Resume,
     ClearHistory,
     Exit,
-    Elevate
+    Elevate,
+
+    /// <summary>
+    /// Shows the help window and exits. Unlike the others this is never relayed to a running
+    /// instance: help must work whether or not TypeyTypey is already running.
+    /// </summary>
+    Help
 }
+
+/// <summary>One command line option and what it does, as shown in the help window.</summary>
+internal readonly record struct CommandLineOption(string Flag, string Summary);
 
 /// <summary>
 /// What <c>--admintask</c> should do to the Windows scheduled task. Unlike every other command line
@@ -38,9 +47,29 @@ internal static class CommandLine
     internal const string AdminArgument = "--admin";
     internal const string AdminTaskArgument = "--admintask";
 
-    internal const string Usage =
-        "Supported commands: --type, --history, --settings, --pause, --resume, --clear-history, " +
-        "--admin, --admintask [system|off], --exit";
+    /// <summary>
+    /// Every supported option, in the order the help window lists them. This is the single source
+    /// of truth: <see cref="Usage"/> is derived from it, so a new option cannot be documented in one
+    /// place and missing from the other.
+    /// </summary>
+    internal static IReadOnlyList<CommandLineOption> Options { get; } =
+    [
+        new("--type", "Type the clipboard, or the armed history entry, into the active window."),
+        new("--history", "Open the clipboard history picker."),
+        new("--settings", "Open the settings window."),
+        new("--pause", "Stop recording copied text in the history."),
+        new("--resume", "Start recording copied text again."),
+        new("--clear-history", "Discard every history entry held in memory."),
+        new("--admin", "Restart the running instance with administrator rights. Raises a UAC prompt."),
+        new("--admintask", "Create a scheduled task that starts TypeyTypey elevated at sign-in, with no UAC prompt."),
+        new("--admintask system", "Create the boot-time task that runs as LocalSystem. See the warning it prints."),
+        new("--admintask off", "Remove whichever scheduled task was created. 'remove' also works."),
+        new("--help", "Show this window."),
+        new("--exit", "Close the running instance.")
+    ];
+
+    internal static string Usage =>
+        "Supported commands: " + string.Join(", ", Options.Select(option => option.Flag));
 
     public static bool TryParse(string[] arguments, out AppCommand command)
     {
@@ -89,6 +118,7 @@ internal static class CommandLine
             "--resume" => AppCommand.Resume,
             "--clear-history" => AppCommand.ClearHistory,
             "--exit" => AppCommand.Exit,
+            "--help" or "-h" or "/?" => AppCommand.Help,
             AdminArgument => AppCommand.Elevate,
             _ => AppCommand.None
         };

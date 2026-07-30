@@ -2,6 +2,56 @@
 
 All notable changes to TypeyTypey are documented here.
 
+## 1.0.5 - 2026-07-30
+
+- **New Typing Mode setting, with three modes.** Clipboard text could only ever be sent as Unicode
+  input, which most Windows applications accept but a browser-hosted remote console often does not:
+  it reads key identity from the virtual key and scan code, and a Unicode event carries neither. A
+  console could therefore receive `a` for `A`, because case was never in the event to begin with.
+  - **Unicode Input** — unchanged behaviour, and still the default. Supports arbitrary Unicode.
+  - **Physical Keypresses** — real virtual-key presses with real modifiers, carrying scan codes, as a
+    keyboard would send them. `A` becomes Shift down, A down, A up, Shift up.
+  - **Automatic** — physical for characters the keyboard layout can produce, Unicode for the rest,
+    decided per character before any input is sent.
+- Selectable from a **Typing Mode** submenu on the tray icon and from Settings. Both read and write
+  the same saved setting, so they cannot disagree.
+- **Existing installations keep Unicode Input.** A settings file written by an earlier build has no
+  typing mode in it and loads as Unicode, so upgrading never changes how typing reaches its target.
+- Physical Keypresses checks the whole string first and types nothing if any character cannot be
+  produced by the current layout, naming the position and code point of the first one. It does not
+  substitute or drop characters.
+- Optional, off by default: **typing-mode override hotkeys**, one per mode, that type once in that
+  mode without changing the saved setting.
+- Every modifier TypeyTypey presses is released on completion, cancellation, injection failure,
+  unexpected error and shutdown.
+
+Physical Keypresses maps through the keyboard layout of the window being typed into, read after the
+initial delay. A remote console configured for a different layout may still produce different
+characters; nothing measurable on this machine can predict that. Windows accepting the injection is
+also not evidence that the remote system displayed the text.
+
+
+- **Fixed: typing was corrupted and cut short when TypeyTypey was not running as administrator.**
+  Held modifier keys leaked into the typed text, so characters reached the target as control codes
+  and the paste arrived truncated. TypeyTypey waits for the hotkey to be released before typing, but
+  that wait asks Windows which keys are down, and a process cannot read the foreground window's
+  input state when that window outranks it. Windows reports the refusal as "no keys held", which is
+  the same answer it gives when the keyboard really is clear, so the wait returned immediately. The
+  hotkey's own modifier keys are now released outright before typing starts, which does not depend
+  on being allowed to read them. ([#13](https://github.com/SwedishLesbian/TypeyTypey/issues/13))
+- **Added a Stop typing hotkey**, `Ctrl+Alt+X` by default, that cancels a typing run already under
+  way. ([#14](https://github.com/SwedishLesbian/TypeyTypey/issues/14))
+- Waiting for modifier keys to be released now gives up after five seconds and says so, instead of
+  waiting forever with no indication.
+- **Added a Help window** covering what the program does, the configured hotkeys and every command
+  line option. Open it from the tray menu or with `--help` (`-h` and `/?` also work). It works
+  whether or not an instance is already running.
+- **About** now shows the product, description, author, version and copyright recorded in the
+  executable rather than a fixed string, and the redundant About section has been removed from
+  Settings.
+- Settings has been redesigned: grouped cards with plain-language captions, and a Save bar that
+  stays in place instead of scrolling away with the content.
+
 ## 1.0.4 - 2026-07-27
 
 Fixes two runtime defects that remained present in v1.0.3. The v1.0.3 changes were in the shipped

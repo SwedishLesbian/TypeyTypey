@@ -364,3 +364,455 @@ public sealed class WindowPlacementTests
             $"clamped location {location} with size {size} must be inside {Primary}");
     }
 }
+
+/// <summary>
+/// Covers the decision rule behind the v1.0.5 fix for issue #13. The SendInput call itself cannot be
+/// tested without a desktop; which keys it is asked to release, and in what order, can be.
+/// </summary>
+public sealed class ModifierReleaseTests
+{
+    [Fact]
+    public void NoModifiers_ReleasesNothing()
+    {
+        // The tray menu, the Settings button and the command line hold no keys down.
+        Assert.Empty(InputTyper.ModifierKeysToRelease(HotkeyModifiers.None));
+    }
+
+    [Fact]
+    public void NoRepeatAlone_ReleasesNothing()
+    {
+        // NoRepeat is a registration flag, not a key a user can be holding.
+        Assert.Empty(InputTyper.ModifierKeysToRelease(HotkeyModifiers.NoRepeat));
+    }
+
+    [Fact]
+    public void CtrlAlt_ReleasesBothSidesOfEach()
+    {
+        Keys[] keys = InputTyper.ModifierKeysToRelease(HotkeyModifiers.Ctrl | HotkeyModifiers.Alt);
+
+        Assert.Equal([Keys.LMenu, Keys.RMenu, Keys.LControlKey, Keys.RControlKey], keys);
+    }
+
+    [Fact]
+    public void Alt_IsReleasedBeforeCtrl()
+    {
+        // Releasing Alt while Ctrl is still down keeps the target from reading it as the lone Alt
+        // tap that opens a menu bar.
+        Keys[] keys = InputTyper.ModifierKeysToRelease(
+            HotkeyModifiers.Ctrl | HotkeyModifiers.Alt | HotkeyModifiers.Shift | HotkeyModifiers.Win);
+
+        Assert.True(Array.IndexOf(keys, Keys.LMenu) < Array.IndexOf(keys, Keys.LControlKey),
+            "Alt must be released before Ctrl");
+    }
+
+    [Fact]
+    public void EveryModifier_ReleasesEightDistinctKeys()
+    {
+        Keys[] keys = InputTyper.ModifierKeysToRelease(
+            HotkeyModifiers.Ctrl | HotkeyModifiers.Alt | HotkeyModifiers.Shift | HotkeyModifiers.Win);
+
+        Assert.Equal(8, keys.Length);
+        Assert.Equal(keys.Length, keys.Distinct().Count());
+    }
+
+    [Fact]
+    public void DefaultTypeHotkey_ReleasesOnlyTheKeysItUses()
+    {
+        // Ctrl+Alt+V: both are held when WM_HOTKEY arrives, Shift and Win are not.
+        Keys[] keys = InputTyper.ModifierKeysToRelease(new AppSettings().TypeClipboardHotkey.ToModifiers());
+
+        Assert.Contains(Keys.LControlKey, keys);
+        Assert.Contains(Keys.LMenu, keys);
+        Assert.DoesNotContain(Keys.LShiftKey, keys);
+        Assert.DoesNotContain(Keys.LWin, keys);
+    }
+}
+
+public sealed class HotkeyValidationTests
+{
+    [Fact]
+    public void DefaultHotkeys_AreAcceptedTogether()
+    {
+        Assert.Null(new AppSettings().ValidateHotkeys());
+    }
+
+    [Fact]
+    public void DefaultStopHotkey_IsCtrlAltX()
+    {
+        HotkeyBinding stop = new AppSettings().StopTypingHotkey;
+
+        Assert.True(stop.Ctrl);
+        Assert.True(stop.Alt);
+        Assert.False(stop.Shift);
+        Assert.Equal(Keys.X, stop.Key);
+    }
+
+    [Fact]
+    public void StopHotkeyMatchingTypeHotkey_IsRejected()
+    {
+        var settings = new AppSettings();
+        settings.StopTypingHotkey = new HotkeyBinding { Key = settings.TypeClipboardHotkey.Key };
+
+        string? error = settings.ValidateHotkeys();
+
+        Assert.NotNull(error);
+        Assert.Contains("same combination", error);
+    }
+
+    [Fact]
+    public void StopHotkeyMatchingHistoryHotkey_IsRejected()
+    {
+        // The pair a two-way check would have missed: neither is the type hotkey.
+        var settings = new AppSettings();
+        settings.StopTypingHotkey = new HotkeyBinding { Shift = true, Key = settings.HistoryHotkey.Key };
+
+        Assert.NotNull(settings.ValidateHotkeys());
+    }
+
+    [Fact]
+    public void HotkeyWithoutAModifier_IsRejected()
+    {
+        var settings = new AppSettings();
+        settings.StopTypingHotkey = new HotkeyBinding { Ctrl = false, Alt = false, Key = Keys.X };
+
+        string? error = settings.ValidateHotkeys();
+
+        Assert.NotNull(error);
+        Assert.Contains("modifier", error);
+    }
+
+    [Fact]
+    public void SettingsFileWithoutStopHotkey_GetsTheDefault()
+    {
+        // Files written before v1.0.5 have no StopTypingHotkey property at all.
+        const string legacy = """{"CharacterDelayMs":25,"MaximumHistoryEntries":75}""";
+
+        AppSettings? settings = JsonSerializer.Deserialize<AppSettings>(legacy);
+
+        Assert.NotNull(settings);
+        settings.Normalize();
+        Assert.Equal(Keys.X, settings.StopTypingHotkey.Key);
+        Assert.Null(settings.ValidateHotkeys());
+    }
+
+    [Fact]
+    public void Normalize_ReplacesAMissingStopHotkey()
+    {
+        var settings = new AppSettings { StopTypingHotkey = null! };
+
+        settings.Normalize();
+
+        Assert.NotNull(settings.StopTypingHotkey);
+    }
+}
+
+public sealed class WorkingAreaFitTests
+{
+    private static readonly Rectangle Small = new(0, 0, 1280, 720);
+
+    [Fact]
+    public void AWindowThatAlreadyFits_IsLeftAlone()
+    {
+        Assert.Equal(new Size(660, 500), WindowPlacement.FitToWorkingArea(new Size(660, 500), Small));
+    }
+
+    [Fact]
+    public void AWindowTallerThanTheDesktop_IsShrunkToFit()
+    {
+        // 780 logical is 1170 device pixels at 150%, which does not fit a 1080p screen.
+        Size fitted = WindowPlacement.FitToWorkingArea(new Size(990, 1170), Small);
+
+        Assert.True(fitted.Height < Small.Height, $"{fitted.Height} must be inside {Small.Height}");
+        Assert.True(fitted.Width <= Small.Width);
+    }
+
+    [Fact]
+    public void AnAbsurdlySmallWorkingArea_StillLeavesAUsableWindow()
+    {
+        Size fitted = WindowPlacement.FitToWorkingArea(new Size(660, 780), new Rectangle(0, 0, 100, 100));
+
+        Assert.Equal(new Size(240, 240), fitted);
+    }
+
+    [Fact]
+    public void HelpIsTallerThanItWasWhenItScrolled()
+    {
+        // Raised after the first build of the help window scrolled on the maintainer's display.
+        Assert.True(WindowPlacement.DefaultHelpClientSize.Height > 620);
+    }
+}
+
+public sealed class ProductMetadataTests
+{
+    [Fact]
+    public void Product_ComesFromTheAssemblyRatherThanALiteral()
+    {
+        Assert.Equal("TypeyTypey", VersionInfo.Product);
+    }
+
+    [Fact]
+    public void AboutFields_AreAllPopulated()
+    {
+        // About renders these directly, so an unset project property would show as a blank row.
+        Assert.NotEmpty(VersionInfo.Description);
+        Assert.NotEmpty(VersionInfo.Company);
+        Assert.NotEmpty(VersionInfo.Copyright);
+    }
+}
+
+public sealed class TypingModeSettingsTests
+{
+    [Fact]
+    public void NewSettingsDefaultToUnicode()
+    {
+        // Not Automatic. Automatic changes how keystrokes reach every target, and an upgrade must
+        // not do that to an existing user without them asking. See AGENTS.md §9b.
+        Assert.Equal(TypingMode.Unicode, new AppSettings().TypingMode);
+    }
+
+    [Fact]
+    public void SettingsFileWithoutTypingModeLoadsAsUnicode()
+    {
+        // Exactly what a v1.0.5 settings file looks like: the property does not exist.
+        const string legacy = """{"CharacterDelayMs":25,"InitialDelayMs":400}""";
+
+        AppSettings? settings = JsonSerializer.Deserialize<AppSettings>(legacy);
+
+        Assert.NotNull(settings);
+        settings.Normalize();
+        Assert.Equal(TypingMode.Unicode, settings.TypingMode);
+        Assert.False(settings.TypingModeOverridesEnabled);
+        Assert.Null(settings.PhysicalModeHotkey);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void DefinedTypingModeValuesSurviveNormalize(int stored)
+    {
+        AppSettings? settings = JsonSerializer.Deserialize<AppSettings>($$"""{"TypingMode":{{stored}}}""");
+
+        Assert.NotNull(settings);
+        settings.Normalize();
+        Assert.Equal(stored, (int)settings.TypingMode);
+    }
+
+    [Theory]
+    [InlineData(7)]
+    [InlineData(-2)]
+    public void UndefinedTypingModeValueNormalizesToUnicode(int stored)
+    {
+        AppSettings? settings = JsonSerializer.Deserialize<AppSettings>($$"""{"TypingMode":{{stored}}}""");
+
+        Assert.NotNull(settings);
+        settings.Normalize();
+        Assert.Equal(TypingMode.Unicode, settings.TypingMode);
+    }
+
+    [Fact]
+    public void TypingModeIsPersistedNumerically()
+    {
+        string json = JsonSerializer.Serialize(new AppSettings { TypingMode = TypingMode.Physical });
+
+        Assert.Contains("\"TypingMode\":1", json);
+        Assert.DoesNotContain("Physical Keypresses", json);
+    }
+
+    [Fact]
+    public void TypingModeAndOverridesSurviveARoundTrip()
+    {
+        var original = new AppSettings
+        {
+            TypingMode = TypingMode.Automatic,
+            TypingModeOverridesEnabled = true,
+            PhysicalModeHotkey = new HotkeyBinding { Ctrl = true, Alt = true, Key = Keys.P }
+        };
+
+        AppSettings? restored = JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(original));
+
+        Assert.NotNull(restored);
+        restored.Normalize();
+        Assert.Equal(TypingMode.Automatic, restored.TypingMode);
+        Assert.True(restored.TypingModeOverridesEnabled);
+        Assert.NotNull(restored.PhysicalModeHotkey);
+        Assert.True(restored.PhysicalModeHotkey.IsSameAs(original.PhysicalModeHotkey));
+        Assert.Null(restored.AutomaticModeHotkey);
+    }
+}
+
+public sealed class TypingModeOverrideHotkeyTests
+{
+    private static AppSettings WithOverrides(bool enabled, HotkeyBinding? physical = null, HotkeyBinding? unicode = null) =>
+        new()
+        {
+            TypingModeOverridesEnabled = enabled,
+            PhysicalModeHotkey = physical,
+            UnicodeModeHotkey = unicode
+        };
+
+    [Fact]
+    public void DisabledOverridesAreNeitherRegisteredNorValidated()
+    {
+        // Deliberately a duplicate of the primary hotkey: while the feature is off it is inert, so
+        // it must not block saving unrelated settings.
+        AppSettings settings = WithOverrides(enabled: false, physical: new HotkeyBinding());
+
+        Assert.Empty(settings.AssignedModeOverrides());
+        Assert.Null(settings.ValidateHotkeys());
+    }
+
+    [Fact]
+    public void EnabledWithNothingAssignedIsValidAndRegistersNothing()
+    {
+        AppSettings settings = WithOverrides(enabled: true);
+
+        Assert.Empty(settings.AssignedModeOverrides());
+        Assert.Null(settings.ValidateHotkeys());
+    }
+
+    [Fact]
+    public void AssignedOverrideIsAcceptedAndReportedWithItsMode()
+    {
+        // Not Ctrl+Alt+Shift+V: that is the default clipboard-history hotkey, and validation is
+        // right to reject it. Ctrl+Alt+P collides with none of the three defaults.
+        var binding = new HotkeyBinding { Ctrl = true, Alt = true, Key = Keys.P };
+        AppSettings settings = WithOverrides(enabled: true, physical: binding);
+
+        Assert.Null(settings.ValidateHotkeys());
+        (TypingMode mode, HotkeyBinding assigned) = Assert.Single(settings.AssignedModeOverrides());
+        Assert.Equal(TypingMode.Physical, mode);
+        Assert.Same(binding, assigned);
+    }
+
+    [Fact]
+    public void OverrideMayNotDuplicateThePrimaryTypeHotkey()
+    {
+        AppSettings settings = WithOverrides(enabled: true, physical: new HotkeyBinding());
+
+        string? error = settings.ValidateHotkeys();
+
+        Assert.NotNull(error);
+        Assert.Contains("Type clipboard", error);
+    }
+
+    [Fact]
+    public void OverridesMayNotDuplicateEachOther()
+    {
+        var same = new HotkeyBinding { Ctrl = true, Alt = true, Key = Keys.P };
+        AppSettings settings = WithOverrides(enabled: true,
+            physical: same,
+            unicode: new HotkeyBinding { Ctrl = true, Alt = true, Key = Keys.P });
+
+        string? error = settings.ValidateHotkeys();
+
+        Assert.NotNull(error);
+        Assert.Contains("override", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AnOverrideWithoutAModifierIsRejected()
+    {
+        AppSettings settings = WithOverrides(enabled: true,
+            physical: new HotkeyBinding { Ctrl = false, Alt = false, Key = Keys.V });
+
+        Assert.NotNull(settings.ValidateHotkeys());
+    }
+
+    [Fact]
+    public void ValidationNamesTheModeSoTheUserKnowsWhichRowToFix()
+    {
+        AppSettings settings = WithOverrides(enabled: true, physical: new HotkeyBinding());
+
+        // ValidateHotkeys lowercases the second name mid-sentence, so match without regard to case.
+        Assert.Contains(TypingModeText.Label(TypingMode.Physical), settings.ValidateHotkeys()!,
+            StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+public sealed class MenuThemingTests
+{
+    /// <summary>
+    /// A menu shaped like the tray menu: a plain item, a submenu with children, and a disabled item.
+    /// </summary>
+    private static ContextMenuStrip BuildMenu(out ToolStripMenuItem child, out ToolStripMenuItem disabled)
+    {
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("Type Current Clipboard");
+
+        var parent = new ToolStripMenuItem("Typing Mode");
+        child = new ToolStripMenuItem("Automatic") { Checked = true };
+        disabled = new ToolStripMenuItem("Unicode Input") { Enabled = false };
+        parent.DropDownItems.Add(child);
+        parent.DropDownItems.Add(disabled);
+        menu.Items.Add(parent);
+        return menu;
+    }
+
+    [Fact]
+    public void SubmenuItemsAreThemedAndNotLeftAtTheSystemDefault()
+    {
+        // The defect: only top-level items were painted, so expanding Typing Mode showed dark text
+        // on the dark drop-down it inherited.
+        using ContextMenuStrip menu = BuildMenu(out ToolStripMenuItem child, out _);
+        ThemePalette dark = ThemeManager.PaletteFor(EffectiveTheme.Dark);
+
+        ThemeManager.ApplyPaletteToMenu(menu, dark);
+
+        Assert.Equal(dark.Text, child.ForeColor);
+        Assert.Equal(dark.Window, child.BackColor);
+    }
+
+    [Fact]
+    public void TheSubmenuDropDownItselfIsPainted()
+    {
+        // The item's colours are not enough: the drop-down is a separate ToolStrip and draws the
+        // background behind them.
+        using ContextMenuStrip menu = BuildMenu(out _, out _);
+        ThemePalette dark = ThemeManager.PaletteFor(EffectiveTheme.Dark);
+
+        ThemeManager.ApplyPaletteToMenu(menu, dark);
+
+        var parent = (ToolStripMenuItem)menu.Items[1];
+        Assert.Equal(dark.Window, parent.DropDown.BackColor);
+        Assert.Equal(dark.Text, parent.DropDown.ForeColor);
+        Assert.NotNull(parent.DropDown.Renderer);
+    }
+
+    [Fact]
+    public void ADisabledSubmenuItemIsThemedToo()
+    {
+        using ContextMenuStrip menu = BuildMenu(out _, out ToolStripMenuItem disabled);
+        ThemePalette dark = ThemeManager.PaletteFor(EffectiveTheme.Dark);
+
+        ThemeManager.ApplyPaletteToMenu(menu, dark);
+
+        Assert.Equal(dark.Window, disabled.BackColor);
+    }
+
+    [Fact]
+    public void LightThemeGetsTheLightPaletteRatherThanTheDarkOne()
+    {
+        using ContextMenuStrip menu = BuildMenu(out ToolStripMenuItem child, out _);
+        ThemePalette light = ThemeManager.PaletteFor(EffectiveTheme.Light);
+
+        ThemeManager.ApplyPaletteToMenu(menu, light);
+
+        Assert.Equal(light.Text, child.ForeColor);
+        Assert.Equal(light.Window, child.BackColor);
+        Assert.NotEqual(ThemeManager.PaletteFor(EffectiveTheme.Dark).Window, child.BackColor);
+    }
+
+    [Fact]
+    public void TheTwoPalettesDifferEnoughToRead()
+    {
+        // A guard on the palettes themselves: identical text and window colours would make every
+        // assertion above pass while the menu stayed unreadable.
+        foreach (EffectiveTheme theme in new[] { EffectiveTheme.Light, EffectiveTheme.Dark })
+        {
+            ThemePalette palette = ThemeManager.PaletteFor(theme);
+            Assert.NotEqual(palette.Window, palette.Text);
+            Assert.NotEqual(palette.Window, palette.DisabledText);
+        }
+    }
+}

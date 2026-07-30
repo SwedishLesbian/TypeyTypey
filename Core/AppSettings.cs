@@ -6,6 +6,32 @@ internal sealed class AppSettings
 {
     public HotkeyBinding TypeClipboardHotkey { get; set; } = new();
     public HotkeyBinding HistoryHotkey { get; set; } = new() { Shift = true };
+
+    /// <summary>
+    /// Cancels a typing run in progress. Absent from settings files written before v1.0.5, where the
+    /// property initialiser supplies the default rather than leaving a null binding behind.
+    /// </summary>
+    public HotkeyBinding StopTypingHotkey { get; set; } = new() { Key = Keys.X };
+    /// <summary>
+    /// How text is turned into keystrokes. Absent from settings files written by earlier builds, which
+    /// deserialize to <see cref="TypingMode.Unicode"/> — the behaviour those builds had — so an
+    /// upgrade never silently changes how an existing user's typing reaches its target.
+    /// </summary>
+    public TypingMode TypingMode { get; set; } = TypingMode.Unicode;
+
+    /// <summary>Opt-in. While false the three bindings below are neither validated nor registered.</summary>
+    public bool TypingModeOverridesEnabled { get; set; }
+
+    /// <summary>
+    /// One-shot hotkeys that type in a named mode without changing <see cref="TypingMode"/>. Null
+    /// means unassigned, which is the default for all three and is always allowed.
+    /// </summary>
+    public HotkeyBinding? AutomaticModeHotkey { get; set; }
+
+    public HotkeyBinding? UnicodeModeHotkey { get; set; }
+
+    public HotkeyBinding? PhysicalModeHotkey { get; set; }
+
     public int CharacterDelayMs { get; set; } = 15;
     public int InitialDelayMs { get; set; } = 500;
     public bool ClearClipboardAfterTyping { get; set; }
@@ -43,6 +69,7 @@ internal sealed class AppSettings
     {
         TypeClipboardHotkey ??= new HotkeyBinding();
         HistoryHotkey ??= new HotkeyBinding { Shift = true };
+        StopTypingHotkey ??= new HotkeyBinding { Key = Keys.X };
         CharacterDelayMs = Math.Clamp(CharacterDelayMs, 0, 1_000);
         InitialDelayMs = Math.Clamp(InitialDelayMs, 0, 10_000);
         MaximumHistoryEntries = Math.Clamp(MaximumHistoryEntries, 1, 500);
@@ -50,6 +77,59 @@ internal sealed class AppSettings
         // theme in play. System.Text.Json will happily deserialize any integer into the enum.
         if (!Enum.IsDefined(Theme))
             Theme = AppTheme.System;
+        if (!Enum.IsDefined(TypingMode))
+            TypingMode = TypingMode.Unicode;
+    }
+
+    /// <summary>
+    /// The override hotkeys that are actually in play, paired with the mode each one types in.
+    /// Empty when the feature is off or nothing is assigned, which is the default.
+    /// </summary>
+    public IEnumerable<(TypingMode Mode, HotkeyBinding Binding)> AssignedModeOverrides()
+    {
+        if (!TypingModeOverridesEnabled)
+            yield break;
+
+        if (AutomaticModeHotkey is not null) yield return (TypingMode.Automatic, AutomaticModeHotkey);
+        if (UnicodeModeHotkey is not null) yield return (TypingMode.Unicode, UnicodeModeHotkey);
+        if (PhysicalModeHotkey is not null) yield return (TypingMode.Physical, PhysicalModeHotkey);
+    }
+
+    /// <summary>
+    /// Checks the three global hotkeys as a set and returns why they cannot be used, or null when
+    /// they are fine. Lives here rather than on the window that edits them so the rule is one thing
+    /// in one place, and so it can be tested without constructing a form.
+    /// </summary>
+    public string? ValidateHotkeys()
+    {
+        var all = new List<(string Name, HotkeyBinding Binding)>
+        {
+            ("Type clipboard", TypeClipboardHotkey),
+            ("Clipboard history", HistoryHotkey),
+            ("Stop typing", StopTypingHotkey)
+        };
+
+        // Unassigned overrides are not an error — they are the default. Only what the user actually
+        // bound takes part in the uniqueness check, and only while the feature is switched on.
+        foreach ((TypingMode mode, HotkeyBinding binding) in AssignedModeOverrides())
+            all.Add(($"{TypingModeText.Label(mode)} override", binding));
+
+        foreach ((string name, HotkeyBinding binding) in all)
+        {
+            if (!binding.IsValid)
+                return $"The {name.ToLowerInvariant()} hotkey needs at least one modifier key.";
+        }
+
+        for (int first = 0; first < all.Count; first++)
+        {
+            for (int second = first + 1; second < all.Count; second++)
+            {
+                if (all[first].Binding.IsSameAs(all[second].Binding))
+                    return $"{all[first].Name} and {all[second].Name.ToLowerInvariant()} are set to the same combination. Give each one a different key.";
+            }
+        }
+
+        return null;
     }
 
     public void Save()

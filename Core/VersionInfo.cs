@@ -13,6 +13,27 @@ internal static class VersionInfo
     /// <summary>Three-part display version, e.g. "1.0.4".</summary>
     public static string Display => Cached.Value;
 
+    /// <summary>
+    /// The Win32 version resource fields, read back from the assembly attributes the project file
+    /// sets. About shows these rather than its own copies, so the executable's properties page and
+    /// the dialog can never disagree.
+    /// </summary>
+    public static string Product => Attribute<AssemblyProductAttribute>(a => a.Product, "TypeyTypey");
+
+    /// <summary>AssemblyTitle is what the project file maps to the Win32 FileDescription field.</summary>
+    public static string Description => Attribute<AssemblyTitleAttribute>(a => a.Title, string.Empty);
+
+    public static string Company => Attribute<AssemblyCompanyAttribute>(a => a.Company, string.Empty);
+
+    public static string Copyright => Attribute<AssemblyCopyrightAttribute>(a => a.Copyright, string.Empty);
+
+    private static string Attribute<T>(Func<T, string> select, string fallback) where T : Attribute
+    {
+        T? attribute = typeof(VersionInfo).Assembly.GetCustomAttribute<T>();
+        string? value = attribute is null ? null : select(attribute);
+        return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
     private static string? ReadRawVersion()
     {
         Assembly assembly = typeof(VersionInfo).Assembly;

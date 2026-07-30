@@ -22,6 +22,15 @@ internal static class Program
             return;
         }
 
+        // --help renders here and exits. Relaying it to a running instance would make help depend on
+        // one existing, and starting an instance to show it would be worse.
+        if (command == AppCommand.Help)
+        {
+            ApplicationConfiguration.Initialize();
+            InfoDialog.ShowHelp(null, AppSettings.Load(), Icon.ExtractAssociatedIcon(Application.ExecutablePath));
+            return;
+        }
+
         AppSettings settings = AppSettings.Load();
         if (settings.RunAsAdministrator && !PrivilegeManager.IsElevated())
         {

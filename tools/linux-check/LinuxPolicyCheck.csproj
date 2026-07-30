@@ -27,9 +27,15 @@
   <!-- Linked, never copied. A copy would drift from the real source and prove nothing. -->
   <ItemGroup>
     <Compile Include="../../Core/PendingSelection.cs" Link="PendingSelection.cs" />
+    <Compile Include="../../Core/TypingPlan.cs" Link="TypingPlan.cs" />
+    <Compile Include="../../Windows/HotkeyManager.cs" Link="HotkeyManager.cs" />
+    <Compile Include="../../TypeyTypey.Tests/TypingModeTests.cs" Link="TypingModeTests.cs" />
     <Compile Include="../../App/AppCommand.cs" Link="AppCommand.cs" />
     <Compile Include="../../Windows/ScheduledTaskManager.cs" Link="ScheduledTaskManager.cs" />
     <Compile Include="../../TypeyTypey.Tests/SelectionAndTaskTests.cs" Link="SelectionAndTaskTests.cs" />
+    <Compile Include="../../Core/TaskXmlCompatibility.cs" Link="TaskXmlCompatibility.cs" />
+    <Compile Include="../../Core/HelpTopics.cs" Link="HelpTopics.cs" />
+    <Compile Include="../../TypeyTypey.Tests/TaskCompatibilityTests.cs" Link="TaskCompatibilityTests.cs" />
   </ItemGroup>
 
 </Project>
