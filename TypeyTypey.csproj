@@ -8,9 +8,9 @@
     <AssemblyName>TypeyTypey</AssemblyName>
     <RootNamespace>TypeyTypey</RootNamespace>
     <ApplicationIcon>typeytypey.ico</ApplicationIcon>
-    <Version>1.0.5</Version>
-    <AssemblyVersion>1.0.5.0</AssemblyVersion>
-    <FileVersion>1.0.5.0</FileVersion>
+    <Version>1.0.6</Version>
+    <AssemblyVersion>1.0.6.0</AssemblyVersion>
+    <FileVersion>1.0.6.0</FileVersion>
     <!-- Without this the SDK appends "+<commit sha>" to ProductVersion, which Explorer shows. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <!-- Win32 version resource. AssemblyTitle becomes FileDescription, which is the string

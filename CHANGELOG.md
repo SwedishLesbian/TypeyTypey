@@ -2,6 +2,34 @@
 
 All notable changes to TypeyTypey are documented here.
 
+## 1.0.6 - 2026-07-30
+
+- **New Typing Mode setting, with three modes.** Clipboard text could only ever be sent as Unicode
+  input, which most Windows applications accept but a browser-hosted remote console often does not:
+  it reads key identity from the virtual key and scan code, and a Unicode event carries neither. A
+  console could therefore receive `a` for `A`, because case was never in the event to begin with.
+  - **Unicode Input** — unchanged behaviour, and still the default. Supports arbitrary Unicode.
+  - **Physical Keypresses** — real virtual-key presses with real modifiers, carrying scan codes, as a
+    keyboard would send them. `A` becomes Shift down, A down, A up, Shift up.
+  - **Automatic** — physical for characters the keyboard layout can produce, Unicode for the rest,
+    decided per character before any input is sent.
+- Selectable from a **Typing Mode** submenu on the tray icon and from Settings. Both read and write
+  the same saved setting, so they cannot disagree.
+- **Existing installations keep Unicode Input.** A settings file written by an earlier build has no
+  typing mode in it and loads as Unicode, so upgrading never changes how typing reaches its target.
+- Physical Keypresses checks the whole string first and types nothing if any character cannot be
+  produced by the current layout, naming the position and code point of the first one. It does not
+  substitute or drop characters.
+- Optional, off by default: **typing-mode override hotkeys**, one per mode, that type once in that
+  mode without changing the saved setting.
+- Every modifier TypeyTypey presses is released on completion, cancellation, injection failure,
+  unexpected error and shutdown.
+
+Physical Keypresses maps through the keyboard layout of the window being typed into, read after the
+initial delay. A remote console configured for a different layout may still produce different
+characters; nothing measurable on this machine can predict that. Windows accepting the injection is
+also not evidence that the remote system displayed the text.
+
 ## 1.0.5 - unreleased
 
 - **Fixed: typing was corrupted and cut short when TypeyTypey was not running as administrator.**

@@ -21,6 +21,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly NotifyIcon _trayIcon;
     private readonly ContextMenuStrip _menu;
     private readonly ToolStripItem _pauseItem;
+    private readonly List<ToolStripMenuItem> _typingModeItems = [];
     private readonly Icon _icon;
     private readonly SynchronizationContext _ui;
 
@@ -50,6 +51,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _menu = new ContextMenuStrip();
         _menu.Items.Add("Type Current Clipboard", null, (_, _) => _ = TypeCurrentClipboardAsync());
         _menu.Items.Add("Clipboard History…", null, (_, _) => ShowHistoryPicker());
+        _menu.Items.Add(BuildTypingModeMenu());
         _menu.Items.Add(new ToolStripSeparator());
         _pauseItem = _menu.Items.Add("Pause Clipboard Monitoring", null, (_, _) => SetMonitoring(!_settings.ClipboardMonitoringEnabled));
         _menu.Items.Add("Clear Clipboard History", null, (_, _) => _history.Clear());
@@ -62,6 +64,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _menu.Opening += (_, _) =>
         {
             _pauseItem.Text = _settings.ClipboardMonitoringEnabled ? "Pause Clipboard Monitoring" : "Resume Clipboard Monitoring";
+            // Read at open time rather than tracked, so the tick follows the setting however it
+            // changed — this menu, the Settings window, or a settings file replaced underneath.
+            foreach (ToolStripMenuItem item in _typingModeItems)
+                item.Checked = (TypingMode)item.Tag! == _settings.TypingMode;
             ThemeManager.ApplyToMenu(_menu, _settings.Theme);
         };
 
@@ -97,6 +103,29 @@ internal sealed class TrayApplicationContext : ApplicationContext
             case AppCommand.Elevate: RestartElevated(); break;
             case AppCommand.Exit: ExitApplication(); break;
         }
+    }
+
+    /// <summary>
+    /// The Typing Mode submenu. Each item carries its mode in <c>Tag</c> so the check state can be
+    /// recomputed from the setting when the menu opens, rather than kept in a second variable that
+    /// could disagree with it.
+    /// </summary>
+    private ToolStripMenuItem BuildTypingModeMenu()
+    {
+        var parent = new ToolStripMenuItem("Typing Mode");
+        foreach (TypingMode mode in TypingModeText.InDisplayOrder)
+        {
+            var item = new ToolStripMenuItem(TypingModeText.Label(mode))
+            {
+                Tag = mode,
+                CheckOnClick = false,
+                ToolTipText = TypingModeText.Description(mode)
+            };
+            item.Click += (_, _) => SetTypingMode(mode);
+            _typingModeItems.Add(item);
+            parent.DropDownItems.Add(item);
+        }
+        return parent;
     }
 
     /// <summary>Marshals an IPC command onto the UI thread.</summary>
@@ -138,11 +167,34 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void OnHotkeyPressed(int id)
     {
         if (id == HotkeyManager.TypeClipboardHotkeyId)
+        {
             _ = TypeCurrentClipboardAsync(_settings.TypeClipboardHotkey.ToModifiers());
-        else if (id == HotkeyManager.HistoryHotkeyId)
+            return;
+        }
+
+        if (id == HotkeyManager.HistoryHotkeyId)
+        {
             ShowHistoryPicker();
-        else if (id == HotkeyManager.StopTypingHotkeyId)
+            return;
+        }
+
+        if (id == HotkeyManager.StopTypingHotkeyId)
+        {
             CancelTyping();
+            return;
+        }
+
+        // The mode comes from which hotkey fired, never from the focused application. Focus is
+        // expected to change during the initial delay — that is the documented workflow — so
+        // anything read from the foreground window would describe the wrong moment.
+        if (HotkeyManager.ModeForOverrideId(id) is TypingMode mode)
+        {
+            HotkeyBinding? binding = _settings.AssignedModeOverrides()
+                .Where(entry => entry.Mode == mode)
+                .Select(entry => entry.Binding)
+                .FirstOrDefault();
+            _ = TypeCurrentClipboardAsync(binding?.ToModifiers() ?? HotkeyModifiers.None, mode);
+        }
     }
 
     /// <summary>
@@ -232,13 +284,24 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    /// <summary>
+    /// Registers every hotkey, or none. A partial registration is the failure mode worth guarding:
+    /// it leaves some shortcuts live and others silently dead, with nothing on screen to say which.
+    /// The caller reverts the settings that produced it.
+    /// </summary>
     private bool ApplyHotkeys(bool reportFailure)
     {
         _hotkeys.UnregisterAll();
-        bool type = _hotkeys.Register(HotkeyManager.TypeClipboardHotkeyId, _settings.TypeClipboardHotkey);
-        bool history = _hotkeys.Register(HotkeyManager.HistoryHotkeyId, _settings.HistoryHotkey);
-        bool stop = _hotkeys.Register(HotkeyManager.StopTypingHotkeyId, _settings.StopTypingHotkey);
-        if (type && history && stop)
+
+        bool registered =
+            _hotkeys.Register(HotkeyManager.TypeClipboardHotkeyId, _settings.TypeClipboardHotkey) &
+            _hotkeys.Register(HotkeyManager.HistoryHotkeyId, _settings.HistoryHotkey) &
+            _hotkeys.Register(HotkeyManager.StopTypingHotkeyId, _settings.StopTypingHotkey);
+
+        foreach ((TypingMode mode, HotkeyBinding binding) in _settings.AssignedModeOverrides())
+            registered &= _hotkeys.Register(HotkeyManager.ModeOverrideHotkeyId(mode), binding);
+
+        if (registered)
             return true;
 
         _hotkeys.UnregisterAll();
@@ -378,7 +441,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// The modifiers of the hotkey that started this, or None when it came from the tray menu, the
     /// Settings button or the command line. Those keys are explicitly released before typing.
     /// </param>
-    public async Task TypeCurrentClipboardAsync(HotkeyModifiers triggeringModifiers = HotkeyModifiers.None)
+    /// <param name="modeOverride">
+    /// Types this once without changing the saved Typing Mode. Supplied by an override hotkey; null
+    /// everywhere else, which means the saved mode.
+    /// </param>
+    public async Task TypeCurrentClipboardAsync(HotkeyModifiers triggeringModifiers = HotkeyModifiers.None, TypingMode? modeOverride = null)
     {
         (bool read, string? clipboard) = ReadClipboard();
         string? text = _pending.Resolve(read, clipboard);
@@ -388,7 +455,23 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        await StartTypingAsync(text, WindowFocus.GetForegroundWindow(), triggeringModifiers);
+        await StartTypingAsync(text, WindowFocus.GetForegroundWindow(), triggeringModifiers, modeOverride ?? _settings.TypingMode);
+    }
+
+    /// <summary>
+    /// Changes the saved Typing Mode from the tray submenu, and tells Settings so the two surfaces
+    /// never disagree. Takes effect on the next typing run; a run already under way keeps the mode
+    /// its plan was built with.
+    /// </summary>
+    public void SetTypingMode(TypingMode mode)
+    {
+        if (_settings.TypingMode == mode)
+            return;
+
+        _settings.TypingMode = mode;
+        _settings.Save();
+        _settingsForm?.RefreshFromSettings();
+        SetStatus($"Typing mode: {TypingModeText.Label(mode)}");
     }
 
     /// <summary>
@@ -397,7 +480,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// </summary>
     private static readonly TimeSpan ModifierReleaseTimeout = TimeSpan.FromSeconds(5);
 
-    private async Task StartTypingAsync(string text, IntPtr destination, HotkeyModifiers triggeringModifiers)
+    private async Task StartTypingAsync(string text, IntPtr destination, HotkeyModifiers triggeringModifiers, TypingMode mode)
     {
         if (_typingCts is not null || string.IsNullOrEmpty(text))
             return;
@@ -428,7 +511,22 @@ internal sealed class TrayApplicationContext : ApplicationContext
             // hotkey's own modifiers are released outright rather than trusted to be up already.
             InputTyper.ReleaseModifiers(triggeringModifiers);
             await InputTyper.SettleAsync(_typingCts.Token);
-            await InputTyper.TypeTextAsync(text, _settings.CharacterDelayMs, _typingCts.Token);
+
+            // The layout is read here rather than when the hotkey fired. Windows keeps the active
+            // layout per thread, so the one that decides what a key produces belongs to the thread
+            // owning the destination — which is only settled once the delay has elapsed and focus
+            // has been restored. Planning happens before a single event is injected, so text the
+            // layout cannot type fails with an untouched destination.
+            (TypingPlan? plan, TypingPlanFailure? failure) =
+                TypingPlanner.Plan(text, mode, KeyboardLayoutMap.ForForegroundWindow());
+            if (plan is null)
+            {
+                SetStatus($"{TypingModeText.Label(mode)} cannot type this text");
+                ShowSafeError(failure!.Message);
+                return;
+            }
+
+            await InputTyper.TypePlanAsync(plan, _settings.CharacterDelayMs, _typingCts.Token);
             if (_settings.ClearClipboardAfterTyping)
             {
                 try { Clipboard.Clear(); } catch (ExternalException) { }
@@ -467,6 +565,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     public void ExitApplication()
     {
         _typingCts?.Cancel();
+        // Cancellation unwinds TypePlanAsync asynchronously, and the process may be gone before its
+        // finally runs. Releasing here as well means a modifier cannot outlive the application.
+        InputTyper.ReleaseHeldModifiers();
         _history.Clear();
         ExitThread();
     }
@@ -477,6 +578,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             _disposed = true;
             _typingCts?.Cancel();
+            InputTyper.ReleaseHeldModifiers();
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
             _menu.Dispose();

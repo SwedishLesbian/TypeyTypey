@@ -18,6 +18,12 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _startWithWindows = new() { Text = "Start with Windows", AutoSize = true };
     private readonly CheckBox _runAsAdministrator = new() { Text = "Run as administrator", AutoSize = true };
     private readonly ComboBox _theme = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 160 };
+    private readonly ComboBox _typingMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+    private readonly MutedLabel _typingModeCaption = new() { AutoSize = true, Margin = new Padding(0, UiKit.SpaceTight, 0, 0) };
+    private readonly CheckBox _overridesEnabled = new() { Text = "Enable typing-mode override hotkeys", AutoSize = true };
+    private readonly HotkeyControls _automaticOverride = new("Automatic", allowUnassigned: true);
+    private readonly HotkeyControls _unicodeOverride = new("Unicode Input", allowUnassigned: true);
+    private readonly HotkeyControls _physicalOverride = new("Physical Keypresses", allowUnassigned: true);
     private readonly Button _save = new() { Text = "Save settings", AutoSize = true };
     private readonly Button _typeNow = new() { Text = "Type current clipboard", AutoSize = true };
     private readonly Button _clearHistory = new() { Text = "Clear history now", AutoSize = true };
@@ -147,6 +153,8 @@ internal sealed class SettingsForm : Form
 
         page.Controls.Add(UiKit.Eyebrow("Typing"));
         page.Controls.Add(Card(
+            LabelledRow("Typing mode", _typingMode),
+            _typingModeCaption,
             NumberRow("Character delay", _characterDelay, "ms"),
             UiKit.Caption("Pause between keystrokes. Raise it if the target drops characters."),
             NumberRow("Wait before typing", _initialDelay, "ms"),
@@ -159,6 +167,14 @@ internal sealed class SettingsForm : Form
             NumberRow("Keep at most", _maximumHistory, "entries"),
             UiKit.Caption("History is held in memory only and is discarded when TypeyTypey exits."),
             _clearHistory));
+
+        page.Controls.Add(UiKit.Eyebrow("Typing-mode override hotkeys"));
+        page.Controls.Add(Card(
+            _overridesEnabled,
+            UiKit.Caption("Advanced. Each one types once in its own mode without changing the mode above. Leave any of them unset."),
+            _automaticOverride,
+            _unicodeOverride,
+            _physicalOverride));
 
         page.Controls.Add(UiKit.Eyebrow("Appearance"));
         page.Controls.Add(Card(LabelledRow("Theme", _theme)));
@@ -187,6 +203,11 @@ internal sealed class SettingsForm : Form
 
         foreach (ThemeChoice choice in ThemeChoice.All)
             _theme.Items.Add(choice);
+
+        foreach (TypingMode mode in TypingModeText.InDisplayOrder)
+            _typingMode.Items.Add(new TypingModeChoice(mode));
+        _typingMode.SelectedIndexChanged += (_, _) => UpdateTypingModeCaption();
+        _overridesEnabled.CheckedChanged += (_, _) => UpdateOverrideState();
     }
 
     private static Control Header()
@@ -282,7 +303,31 @@ internal sealed class SettingsForm : Form
         _startWithWindows.Checked = settings.StartWithWindows;
         _runAsAdministrator.Checked = settings.RunAsAdministrator;
         _theme.SelectedItem = ThemeChoice.All.FirstOrDefault(choice => choice.Value == settings.Theme) ?? ThemeChoice.All[0];
+        _typingMode.SelectedItem = _typingMode.Items.Cast<TypingModeChoice>().FirstOrDefault(choice => choice.Value == settings.TypingMode);
+        _overridesEnabled.Checked = settings.TypingModeOverridesEnabled;
+        _automaticOverride.SetOptionalBinding(settings.AutomaticModeHotkey);
+        _unicodeOverride.SetOptionalBinding(settings.UnicodeModeHotkey);
+        _physicalOverride.SetOptionalBinding(settings.PhysicalModeHotkey);
+        UpdateTypingModeCaption();
+        UpdateOverrideState();
     }
+
+    /// <summary>The caption explains the selected mode, so the dropdown does not have to be self-explanatory.</summary>
+    private void UpdateTypingModeCaption() =>
+        _typingModeCaption.Text = TypingModeText.Description(SelectedTypingMode());
+
+    /// <summary>
+    /// The override rows are greyed rather than hidden when the feature is off. Hiding them would
+    /// resize the card as the box is ticked, moving everything below it under the pointer.
+    /// </summary>
+    private void UpdateOverrideState()
+    {
+        foreach (HotkeyControls row in new[] { _automaticOverride, _unicodeOverride, _physicalOverride })
+            row.SetEnabledState(_overridesEnabled.Checked);
+    }
+
+    private TypingMode SelectedTypingMode() =>
+        _typingMode.SelectedItem is TypingModeChoice choice ? choice.Value : TypingMode.Unicode;
 
     private void SaveSettings()
     {
@@ -299,6 +344,11 @@ internal sealed class SettingsForm : Form
             StartWithWindows = _startWithWindows.Checked,
             RunAsAdministrator = _runAsAdministrator.Checked,
             Theme = SelectedTheme(),
+            TypingMode = SelectedTypingMode(),
+            TypingModeOverridesEnabled = _overridesEnabled.Checked,
+            AutomaticModeHotkey = _automaticOverride.GetOptionalBinding(),
+            UnicodeModeHotkey = _unicodeOverride.GetOptionalBinding(),
+            PhysicalModeHotkey = _physicalOverride.GetOptionalBinding(),
             WindowLeft = Location.X,
             WindowTop = Location.Y
         };
@@ -336,6 +386,12 @@ internal sealed class SettingsForm : Form
         _context.ShowBalloon("Settings saved.");
     }
 
+    /// <summary>Wraps the mode so the combo shows its shared label rather than the enum name.</summary>
+    private sealed record TypingModeChoice(TypingMode Value)
+    {
+        public override string ToString() => TypingModeText.Label(Value);
+    }
+
     /// <summary>Pairs the persisted enum with its display string so the string is never stored.</summary>
     private sealed record ThemeChoice(AppTheme Value, string Label)
     {
@@ -357,19 +413,53 @@ internal sealed class SettingsForm : Form
         private readonly CheckBox _win = new() { Text = "Win", AutoSize = true };
         private readonly ComboBox _key = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 100 };
 
-        public HotkeyControls(string label)
+        private readonly bool _allowUnassigned;
+
+        /// <summary>
+        /// <paramref name="allowUnassigned"/> adds a "(not set)" key, which is how an override
+        /// hotkey says it is not bound. The three primary hotkeys must always have a key, so they
+        /// leave it off and the entry never appears for them.
+        /// </summary>
+        public HotkeyControls(string label, bool allowUnassigned = false)
         {
+            _allowUnassigned = allowUnassigned;
             AutoSize = true;
             WrapContents = false;
             Margin = new Padding(0, 0, 0, UiKit.Space);
-            // A fixed label width lines the three hotkey rows up into a column without a table.
-            Controls.Add(new Label { Text = label, AutoSize = false, Width = 108, Margin = new Padding(0, 5, UiKit.Space, 0) });
+            // A fixed label width lines the hotkey rows up into a column without a table.
+            Controls.Add(new Label { Text = label, AutoSize = false, Width = 148, Margin = new Padding(0, 5, UiKit.Space, 0) });
             foreach (CheckBox modifier in new[] { _ctrl, _alt, _shift, _win })
                 modifier.Margin = new Padding(0, 4, UiKit.Space, 0);
             _key.Margin = new Padding(UiKit.SpaceTight, 1, 0, 0);
             Controls.AddRange([_ctrl, _alt, _shift, _win, _key]);
+            if (allowUnassigned)
+                _key.Items.Add(UnassignedKey);
             foreach (Keys key in KeysList())
                 _key.Items.Add(key);
+        }
+
+        /// <summary>The "(not set)" entry. Boxed as an object so the combo can hold it beside Keys values.</summary>
+        private static readonly object UnassignedKey = "(not set)";
+
+        /// <summary>Reads an override binding, or null when the user left it unassigned.</summary>
+        public HotkeyBinding? GetOptionalBinding() =>
+            _key.SelectedItem is Keys ? GetBinding() : null;
+
+        public void SetOptionalBinding(HotkeyBinding? binding)
+        {
+            if (binding is null)
+            {
+                _ctrl.Checked = _alt.Checked = _shift.Checked = _win.Checked = false;
+                _key.SelectedItem = UnassignedKey;
+                return;
+            }
+            SetBinding(binding);
+        }
+
+        public void SetEnabledState(bool enabled)
+        {
+            foreach (Control control in Controls)
+                control.Enabled = enabled;
         }
 
         public void SetBinding(HotkeyBinding binding)
@@ -379,7 +469,7 @@ internal sealed class SettingsForm : Form
             _shift.Checked = binding.Shift;
             _win.Checked = binding.Win;
             _key.SelectedItem = binding.Key;
-            if (_key.SelectedIndex < 0) _key.SelectedIndex = 0;
+            if (_key.SelectedIndex < 0) _key.SelectedIndex = _allowUnassigned ? 1 : 0;
         }
 
         public HotkeyBinding GetBinding() => new()

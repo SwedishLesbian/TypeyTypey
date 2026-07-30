@@ -144,6 +144,23 @@ internal sealed class InfoDialog : Form
             card.Add(UiKit.Caption("These are the hotkeys currently configured. Change them in Settings."));
         });
 
+        dialog.AddSection("Typing mode", card =>
+        {
+            card.Add(dialog.Paragraph(
+                "How the text reaches the target. Ordinary Windows applications accept either; a remote " +
+                "console running in a browser usually needs real key presses."));
+            foreach (TypingMode mode in TypingModeText.InDisplayOrder)
+                card.Add(dialog.Definition(TypingModeText.Label(mode), TypingModeText.Description(mode)));
+            card.Add(dialog.Definition("Now using", TypingModeText.Label(settings.TypingMode)));
+            card.Add(UiKit.Caption(
+                "Physical keypresses are mapped through the keyboard layout of the window you are typing into. " +
+                "A remote console set to a different layout can still produce different characters, and TypeyTypey " +
+                "cannot see that from this machine."));
+
+            foreach ((TypingMode mode, HotkeyBinding binding) in settings.AssignedModeOverrides())
+                card.Add(dialog.Definition(binding.ToString(), $"Type once using {TypingModeText.Label(mode)}."));
+        });
+
         dialog.AddSection("Command line", card =>
         {
             foreach (CommandLineOption option in CommandLine.Options)

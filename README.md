@@ -19,7 +19,8 @@ Perfect for:
 
 - Global hotkeys for current clipboard text, clipboard history, and stopping a typing run
 - Searchable, keyboard-first clipboard-history picker
-- Native Unicode typing via Windows `SendInput`—never clipboard paste
+- Three typing modes: Unicode input, physical keypresses for remote consoles, or automatic
+- Native keyboard simulation via Windows `SendInput`—never clipboard paste
 - Configurable initial and per-character delays
 - Light, Dark, or System-default theme, applied without restarting
 - Quiet notification-area application with standard Windows controls
@@ -73,6 +74,8 @@ The executable is copied to `bin\TypeyTypey.exe` (also left in the canonical pub
 | Open clipboard history | `Ctrl+Alt+Shift+V` |
 | Stop typing | `Ctrl+Alt+X` |
 
+Optional one-shot **typing-mode override hotkeys** can be enabled in Settings. They are unassigned and switched off by default.
+
 **Type current clipboard** reads the clipboard at the moment the shortcut is pressed, waits for the modifier keys to be released, then types the text into the window you had focused. This is the normal path for a password field, console, or legacy application that accepts keystrokes but rejects paste. If the modifier keys are still held after five seconds, TypeyTypey says so rather than typing.
 
 **Stop typing** cancels a run already under way, leaving whatever was typed so far in place. It is useful when the text is long, the wrong window was focused, or the destination is handling the keystrokes unexpectedly.
@@ -81,13 +84,37 @@ The executable is copied to `bin\TypeyTypey.exe` (also left in the canonical pub
 
 Selecting an entry does not type it. It makes that entry what `Ctrl+Alt+V` will type, and a notification confirms the choice by length — never by showing the text. Pick the entry, click the destination field, then press `Ctrl+Alt+V`. The selection stays active so it can be typed into several fields, until you copy something new, delete it from the history, or clear the history — after which `Ctrl+Alt+V` returns to typing the current clipboard. Copying wins even while clipboard monitoring is paused: TypeyTypey compares the clipboard against what it held when you picked, rather than relying on having watched it change.
 
+### Typing mode
+
+TypeyTypey can turn clipboard text into keystrokes two different ways, and which one works depends on what is receiving them.
+
+| Mode | What it sends | Use it for |
+| --- | --- | --- |
+| **Unicode Input** | A Unicode character event per character. | Most Windows applications. Supports arbitrary Unicode—emoji, accents, non-Latin scripts. This is the default and the behaviour of every earlier version. |
+| **Physical Keypresses** | Real virtual-key presses with real modifiers and scan codes, as a keyboard would send them: `A` is Shift down, A down, A up, Shift up. | iDRAC, VNC, KVM and other remote consoles hosted in a browser. |
+| **Automatic** | Physical keypresses for the characters the keyboard layout can produce, Unicode for the rest, decided before typing starts. | Mixed text you want to reach a console without giving up on the characters it cannot type physically. |
+
+Pick a mode from the tray icon's **Typing Mode** submenu or in Settings; both change the same saved setting. Upgrading from an earlier version keeps Unicode Input, so nothing about your existing setup changes until you choose otherwise.
+
+**Why Physical Keypresses exists.** A browser-hosted console does not receive characters. It receives DOM key events and reconstructs the character from the key's identity plus the modifiers held at the time. A Unicode input event carries no virtual key and no scan code, so a console reading them can end up with the right letter in the wrong case, or nothing at all. Physical keypresses give it the key and the Shift it expects.
+
+**Keyboard layouts.** Physical keypresses are mapped through a Windows keyboard layout, read from the window you are typing into and captured after the initial delay—so moving focus during that delay works as intended. Two limits follow. TypeyTypey maps against your **local** layout; a remote console configured for a different one will interpret the same keys differently, and nothing measurable on this machine can predict that. And characters the local layout has no key for cannot be sent physically at all.
+
+In **Physical Keypresses**, text containing such a character is refused outright: TypeyTypey types nothing and names the position and code point of the first character it cannot produce. It will not substitute, drop, or approximate one. In **Automatic**, those characters fall back to Unicode input individually and everything else is still sent physically.
+
+Windows accepting the keystrokes is not evidence that the remote system displayed them. TypeyTypey reports only whether the injection was accepted locally.
+
+#### Typing-mode override hotkeys
+
+Off by default. When enabled, you can bind a hotkey to each mode; pressing it types once in that mode without changing the saved Typing Mode. Any of them may be left unassigned. They use the same clipboard, history selection and startup delay as the normal type hotkey, and the mode is decided by which hotkey you pressed—not by whatever window had focus when you pressed it.
+
 ### Tray and settings
 
-TypeyTypey runs in the notification area from the moment it starts; it does not open a window on launch. Double-click the tray icon to open clipboard history. Its menu also offers typing, pause/resume monitoring, clearing history, settings, **Help**, About, and Exit. Closing the Settings window simply closes it — hotkeys, monitoring and the tray icon are unaffected. Use **Exit** to end the application and clear its in-memory history.
+TypeyTypey runs in the notification area from the moment it starts; it does not open a window on launch. Double-click the tray icon to open clipboard history. Its menu also offers typing, the **Typing Mode** submenu with a tick beside the active mode, pause/resume monitoring, clearing history, settings, **Help**, About, and Exit. Closing the Settings window simply closes it — hotkeys, monitoring and the tray icon are unaffected. Use **Exit** to end the application and clear its in-memory history.
 
 **Help** explains what TypeyTypey does, lists the hotkeys you currently have configured, and documents every command-line option. It is also available as `TypeyTypey.exe --help`, which works whether or not an instance is already running. **About** shows the product details recorded in the executable, along with the version.
 
-Settings let you change all three hotkeys, typing delays, history size, monitoring, theme, startup behavior, and the optional **Run as administrator** mode. Defaults are 15 ms per character, a 500 ms initial delay, 50 history entries, and the **System default** theme, which follows the Windows light/dark app setting. Use a longer delay when a remote or legacy application drops characters.
+Settings let you change all three hotkeys, the typing mode and its optional override hotkeys, typing delays, history size, monitoring, theme, startup behavior, and the optional **Run as administrator** mode. Defaults are 15 ms per character, a 500 ms initial delay, 50 history entries, and the **System default** theme, which follows the Windows light/dark app setting. Use a longer delay when a remote or legacy application drops characters.
 
 ### Command line
 

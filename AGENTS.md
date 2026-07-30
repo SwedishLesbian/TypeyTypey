@@ -29,7 +29,7 @@ navigation, not for layering, and the `.csproj` needs no change when files move 
 | Folder | Holds |
 |---|---|
 | `App/` | Entry point and application lifetime — `Program`, `TrayApplicationContext`, `AppCommand` |
-| `Core/` | Non-visual state and services — settings, theme enum, history, version, single-instance |
+| `Core/` | Non-visual state and services — settings, theme enum, history, version, single-instance, typing plan |
 | `Ui/` | Windows and presentation — `SettingsForm`, `HistoryPicker`, `InfoDialog`, `ThemeManager`, `WindowPlacement`, `UiKit` |
 | `Windows/` | Win32 P/Invoke, one concern per file — hotkeys, input injection, clipboard, focus, privilege, startup |
 
@@ -112,7 +112,8 @@ of the suite that has no Windows dependency:
 dotnet test tools/linux-check/LinuxPolicyCheck.csproj
 ```
 
-It links the platform-free sources and `SelectionAndTaskTests.cs` and stubs the rest. Read its
+It links the platform-free sources and their tests — `SelectionAndTaskTests.cs` and
+`TypingModeTests.cs` — and stubs the rest. Read its
 README before quoting a green run: it compiles no WinForms code and produces no executable, so CI on
 `windows-latest` remains the only evidence for the full suite and the binary. A Claude Code on the
 web session sets this up automatically through `.claude/hooks/session-start.sh`.
@@ -151,7 +152,8 @@ publish a release without being told to. Work stops in the local repository with
 `TypeyTypey.Tests/` — xunit. `ClipboardHistoryTests.cs` covers history, CLI parsing and the INPUT
 ABI; `PolicyTests.cs` covers settings, theme, hotkey bindings, version and placement policy;
 `SelectionAndTaskTests.cs` covers `--admintask` parsing, the scheduled-task XML and the picker
-selection rules. That third file deliberately touches no WinForms type, so it is the part of the
+selection rules; `TypingModeTests.cs` covers typing-mode planning, key-event ordering and the
+override-hotkey ids against a fake keyboard layout. That third file deliberately touches no WinForms type, so it is the part of the
 suite a non-Windows machine can still run — see §4. The
 main project exposes internals via
 `InternalsVisibleTo("TypeyTypey.Tests")` in `Properties/AssemblyInfo.cs`, so internal types are
@@ -310,6 +312,88 @@ window it does not outrank, with the hotkey held down at the moment of the press
 
 Also unverified at runtime: the Stop typing hotkey actually cancelling a run in progress, the
 five-second modifier timeout message, Light and high-contrast rendering of the new cards, and About.
+
+## 9b. Typing Mode — decisions and limits (v1.0.6)
+
+### Why the default is Unicode Input, not Automatic
+
+`TypingMode.Unicode` is persisted as `0`, so a settings file written before v1.0.6 — which has no
+such property — deserializes to the behaviour that build had. That is deliberate and is the whole
+migration: no version check, no upgrade flag, no way for the two to disagree. New installations get
+Unicode Input as well. Distinguishing "upgraded" from "new" would need a marker written by a build
+that never wrote one, and the reward would be defaulting users into a mode whose runtime behaviour no
+one has yet observed. `TypingModeSettingsTests` pins both the numeric value and the legacy-file case.
+
+### Automatic mixes physical and Unicode within one run
+
+Per character, decided in full before any event is injected. The alternative — all-physical or
+all-Unicode for the whole string — was rejected because one `™` in a paragraph would push the rest
+onto the path a browser console cannot read, which is the case the mode exists for. Mixing is safe
+here because each character is emitted as its own complete `SendInput` batch with its own modifiers
+pressed and released, so no state carries across the boundary between a physical step and a Unicode
+one.
+
+### Keyboard-layout semantics
+
+- **Which layout:** the one belonging to the thread that owns the foreground window, read through
+  `GetKeyboardLayout` after `GetWindowThreadProcessId`. Windows tracks layout per thread, so this is
+  the layout that decides what a key produces at the destination.
+- **When:** immediately before typing begins — after the initial delay, after focus restoration, and
+  after the hotkey's modifiers are released. Not when the hotkey was pressed. The documented workflow
+  is that the user presses the hotkey and *then* clicks into the destination, so a layout captured at
+  hotkey time would describe the wrong window.
+- **Focus changing during the delay:** handled by the above. The plan is built against wherever focus
+  ended up.
+- **Local vs remote layout:** unresolvable from this machine, and not claimed. A remote console set
+  to a different layout will interpret the same keys differently. Physical Keypresses promises
+  correct local key presses, not correct remote characters. Stated in README and RELEASE_NOTES.
+
+### What is rejected rather than guessed
+
+`VkKeyScanEx` shift states beyond Shift/Ctrl/Alt (Hankaku and the OEM-reserved bits), surrogates,
+control characters other than tab and newline, and anything the layout has no key for. In Physical
+Keypresses those refuse the whole string with a position and code point; in Automatic they fall back
+to Unicode individually.
+
+### Modifier release
+
+`InputTyper` records what it pressed *before* the batch that presses it and clears the record only
+once the batch carrying the key-ups is fully accepted, so a partial `SendInput` leaves the modifier
+recorded as held. `TypePlanAsync` releases in a `finally`, and `ExitApplication` and `Dispose`
+release again in case the process ends before that unwinds.
+
+### Not verified at runtime **[BLOCKING for a release]**
+
+Implemented on a Linux container that cannot build this project (§4). Planning, key-event ordering
+and the settings rules have unit coverage — 111 tests, 69 of which run under `tools/linux-check`.
+**Nothing below has been observed.** Tracked in #16.
+
+| Target | Unicode Input | Physical Keypresses | Automatic |
+|---|---|---|---|
+| Notepad | | | |
+| Windows Terminal / PowerShell | | | |
+| `mstsc.exe` | | | |
+| Browser-hosted iDRAC/VNC/KVM | | | |
+| Chrome or Edge address bar | | | |
+
+Type each of these in each mode:
+
+- `AaZz019!@#_-+=[]{};:'",.<>/?\|`~` — case and punctuation. Expect exact reproduction in all three
+  modes in ordinary applications; this is the string that proves #16 in a console.
+- `TypeyTypey ™ café ✓ 😀` — expect Unicode Input to type it whole; Physical Keypresses to refuse it
+  naming position 12 (U+2122) on a US layout and type **nothing**; Automatic to type it whole, with
+  the ASCII physically and the rest as Unicode.
+
+Also confirm:
+
+- [ ] Cancellation during the startup delay, mid-run, and during a shifted character — and that no
+      modifier is left down afterwards (test by typing a lowercase letter immediately after).
+- [ ] Switching mode from the tray submenu takes effect on the next run, ticks the right item, and
+      survives a restart.
+- [ ] Settings dropdown and tray submenu always agree, in both directions.
+- [ ] An override hotkey types once in its mode and leaves the saved mode alone.
+- [ ] Override hotkey duplicating the primary is refused at save with a clear message.
+- [ ] A non-US layout: a character reachable only through AltGr.
 
 ## 10. Escalate rather than decide
 

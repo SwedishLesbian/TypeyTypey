@@ -148,31 +148,106 @@ internal static class InputTyper
     /// <summary>Characters to send between yields when the character delay is zero.</summary>
     private const int CharactersPerYield = 32;
 
-    public static async Task TypeTextAsync(string text, int characterDelayMs, CancellationToken cancellationToken)
+    /// <summary>
+    /// Modifiers this class has pressed and not yet released. Set before the batch that presses
+    /// them and cleared only once the batch carrying their key-ups is fully accepted, so a partial
+    /// injection leaves them recorded as held rather than assumed released.
+    ///
+    /// Static because typing is single-flight — <c>TrayApplicationContext</c> admits one run at a
+    /// time and drives it from the UI thread — and because shutdown needs to release whatever a
+    /// killed run left down without holding a reference to it.
+    /// </summary>
+    private static StrokeModifiers _heldByPlan;
+
+    /// <summary>
+    /// Emits a validated plan. Every exit path — completion, cancellation, injection failure,
+    /// unexpected exception — releases the modifiers this method pressed, because a Shift left down
+    /// turns the user's next keystroke into something they did not type.
+    /// </summary>
+    public static async Task TypePlanAsync(TypingPlan plan, int characterDelayMs, CancellationToken cancellationToken)
     {
         int sinceYield = 0;
-        foreach (char character in text)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            INPUT[] inputs = [CreateUnicodeInput(character, keyUp: false), CreateUnicodeInput(character, keyUp: true)];
-            uint sent = SendInput((uint)inputs.Length, inputs, NativeInputSize);
-            if (sent != (uint)inputs.Length)
-                throw new InputInjectionException(sent, (uint)inputs.Length, sent == 0 ? Marshal.GetLastWin32Error() : 0);
+            foreach (TypingStep step in plan.Steps)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                INPUT[] inputs = step.Physical ? PhysicalInputs(step) : UnicodeInputs(step.Character);
 
-            if (characterDelayMs > 0)
-            {
-                await Task.Delay(characterDelayMs, cancellationToken).ConfigureAwait(false);
-            }
-            else if (++sinceYield >= CharactersPerYield)
-            {
-                // A zero delay must still yield periodically. With no await at all this loop runs to
-                // completion on the UI thread, the message loop stops pumping, and the stop-typing
-                // hotkey cannot be delivered. Task.Delay(1) is not a substitute: the system timer
-                // rounds it up to roughly 15 ms, which would make "no delay" the slowest setting.
-                sinceYield = 0;
-                await Task.Yield();
+                // Recorded before the call, not after: if SendInput inserts only part of the batch,
+                // the key-ups at the end are the part most likely to have been dropped.
+                if (step.Physical)
+                    _heldByPlan = step.Modifiers;
+
+                uint sent = SendInput((uint)inputs.Length, inputs, NativeInputSize);
+                if (sent != (uint)inputs.Length)
+                    throw new InputInjectionException(sent, (uint)inputs.Length, sent == 0 ? Marshal.GetLastWin32Error() : 0);
+
+                _heldByPlan = StrokeModifiers.None;
+
+                if (characterDelayMs > 0)
+                {
+                    await Task.Delay(characterDelayMs, cancellationToken).ConfigureAwait(false);
+                }
+                else if (++sinceYield >= CharactersPerYield)
+                {
+                    // A zero delay must still yield periodically. With no await at all this loop runs
+                    // to completion on the UI thread, the message loop stops pumping, and the
+                    // stop-typing hotkey cannot be delivered. Task.Delay(1) is not a substitute: the
+                    // system timer rounds it up to roughly 15 ms, which would make "no delay" the
+                    // slowest setting.
+                    sinceYield = 0;
+                    await Task.Yield();
+                }
             }
         }
+        finally
+        {
+            ReleaseHeldModifiers();
+        }
+    }
+
+    /// <summary>
+    /// Releases any modifier this class pressed and has not confirmed released. Safe to call at any
+    /// time; a no-op when nothing is held. Called on every exit from <see cref="TypePlanAsync"/> and
+    /// again at shutdown.
+    /// </summary>
+    public static void ReleaseHeldModifiers()
+    {
+        StrokeModifiers held = _heldByPlan;
+        if (held == StrokeModifiers.None)
+            return;
+
+        _heldByPlan = StrokeModifiers.None;
+        INPUT[] inputs = ToInputs(KeyEventSequence.ForRelease(held));
+        if (inputs.Length > 0)
+            SendInput((uint)inputs.Length, inputs, NativeInputSize);
+    }
+
+    private static INPUT[] UnicodeInputs(char character) =>
+        [CreateUnicodeInput(character, keyUp: false), CreateUnicodeInput(character, keyUp: true)];
+
+    /// <summary>
+    /// One character as a real key press, in a single batch so the whole character is accepted or
+    /// rejected together. The ordering comes from <see cref="KeyEventSequence"/>, which is where it
+    /// is tested; this only turns those events into the Win32 structures.
+    ///
+    /// Modifiers are pressed and released per character rather than held across a run. Holding Shift
+    /// through the delay between characters would leave the target seeing a modifier down while
+    /// nothing is being typed, which some applications read as a shortcut in progress.
+    /// </summary>
+    private static INPUT[] PhysicalInputs(TypingStep step) =>
+        ToInputs(KeyEventSequence.ForStep(step));
+
+    private static INPUT[] ToInputs(IReadOnlyList<KeyEvent> events)
+    {
+        var inputs = new INPUT[events.Count];
+        for (int index = 0; index < events.Count; index++)
+        {
+            KeyEvent keyEvent = events[index];
+            inputs[index] = CreateKeyInput(keyEvent.VirtualKey, keyEvent.ScanCode, keyEvent.KeyUp);
+        }
+        return inputs;
     }
 
     private static INPUT CreateUnicodeInput(char character, bool keyUp) => new()
@@ -182,10 +257,25 @@ internal static class InputTyper
     };
 
     /// <summary>A key-up for a virtual key. Unlike the typed characters this carries no Unicode flag.</summary>
-    private static INPUT CreateKeyUpInput(Keys key) => new()
+    private static INPUT CreateKeyUpInput(Keys key) => CreateKeyInput((ushort)key, 0, keyUp: true);
+
+    /// <summary>
+    /// A virtual-key event, carrying the scan code alongside the virtual key rather than instead of
+    /// it. Windows resolves the keystroke from <c>wVk</c>, but passes <c>wScan</c> through to the
+    /// message, and that is what a browser-hosted console reads to identify the physical key.
+    /// </summary>
+    private static INPUT CreateKeyInput(ushort virtualKey, ushort scanCode, bool keyUp) => new()
     {
         type = InputKeyboard,
-        U = new InputUnion { ki = new KEYBDINPUT { wVk = (ushort)key, dwFlags = KeyeventfKeyup } }
+        U = new InputUnion
+        {
+            ki = new KEYBDINPUT
+            {
+                wVk = virtualKey,
+                wScan = scanCode,
+                dwFlags = keyUp ? KeyeventfKeyup : 0
+            }
+        }
     };
 
     internal static string DescribeFailure(InputInjectionException failure) => failure.WindowsErrorCode switch

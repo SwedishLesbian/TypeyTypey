@@ -559,3 +559,169 @@ public sealed class ProductMetadataTests
         Assert.NotEmpty(VersionInfo.Copyright);
     }
 }
+
+public sealed class TypingModeSettingsTests
+{
+    [Fact]
+    public void NewSettingsDefaultToUnicode()
+    {
+        // Not Automatic. Automatic changes how keystrokes reach every target, and an upgrade must
+        // not do that to an existing user without them asking. See AGENTS.md §9b.
+        Assert.Equal(TypingMode.Unicode, new AppSettings().TypingMode);
+    }
+
+    [Fact]
+    public void SettingsFileWithoutTypingModeLoadsAsUnicode()
+    {
+        // Exactly what a v1.0.5 settings file looks like: the property does not exist.
+        const string legacy = """{"CharacterDelayMs":25,"InitialDelayMs":400}""";
+
+        AppSettings? settings = JsonSerializer.Deserialize<AppSettings>(legacy);
+
+        Assert.NotNull(settings);
+        settings.Normalize();
+        Assert.Equal(TypingMode.Unicode, settings.TypingMode);
+        Assert.False(settings.TypingModeOverridesEnabled);
+        Assert.Null(settings.PhysicalModeHotkey);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void DefinedTypingModeValuesSurviveNormalize(int stored)
+    {
+        AppSettings? settings = JsonSerializer.Deserialize<AppSettings>($$"""{"TypingMode":{{stored}}}""");
+
+        Assert.NotNull(settings);
+        settings.Normalize();
+        Assert.Equal(stored, (int)settings.TypingMode);
+    }
+
+    [Theory]
+    [InlineData(7)]
+    [InlineData(-2)]
+    public void UndefinedTypingModeValueNormalizesToUnicode(int stored)
+    {
+        AppSettings? settings = JsonSerializer.Deserialize<AppSettings>($$"""{"TypingMode":{{stored}}}""");
+
+        Assert.NotNull(settings);
+        settings.Normalize();
+        Assert.Equal(TypingMode.Unicode, settings.TypingMode);
+    }
+
+    [Fact]
+    public void TypingModeIsPersistedNumerically()
+    {
+        string json = JsonSerializer.Serialize(new AppSettings { TypingMode = TypingMode.Physical });
+
+        Assert.Contains("\"TypingMode\":1", json);
+        Assert.DoesNotContain("Physical Keypresses", json);
+    }
+
+    [Fact]
+    public void TypingModeAndOverridesSurviveARoundTrip()
+    {
+        var original = new AppSettings
+        {
+            TypingMode = TypingMode.Automatic,
+            TypingModeOverridesEnabled = true,
+            PhysicalModeHotkey = new HotkeyBinding { Ctrl = true, Alt = true, Shift = true, Key = Keys.V }
+        };
+
+        AppSettings? restored = JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(original));
+
+        Assert.NotNull(restored);
+        restored.Normalize();
+        Assert.Equal(TypingMode.Automatic, restored.TypingMode);
+        Assert.True(restored.TypingModeOverridesEnabled);
+        Assert.NotNull(restored.PhysicalModeHotkey);
+        Assert.True(restored.PhysicalModeHotkey.IsSameAs(original.PhysicalModeHotkey));
+        Assert.Null(restored.AutomaticModeHotkey);
+    }
+}
+
+public sealed class TypingModeOverrideHotkeyTests
+{
+    private static AppSettings WithOverrides(bool enabled, HotkeyBinding? physical = null, HotkeyBinding? unicode = null) =>
+        new()
+        {
+            TypingModeOverridesEnabled = enabled,
+            PhysicalModeHotkey = physical,
+            UnicodeModeHotkey = unicode
+        };
+
+    [Fact]
+    public void DisabledOverridesAreNeitherRegisteredNorValidated()
+    {
+        // Deliberately a duplicate of the primary hotkey: while the feature is off it is inert, so
+        // it must not block saving unrelated settings.
+        AppSettings settings = WithOverrides(enabled: false, physical: new HotkeyBinding());
+
+        Assert.Empty(settings.AssignedModeOverrides());
+        Assert.Null(settings.ValidateHotkeys());
+    }
+
+    [Fact]
+    public void EnabledWithNothingAssignedIsValidAndRegistersNothing()
+    {
+        AppSettings settings = WithOverrides(enabled: true);
+
+        Assert.Empty(settings.AssignedModeOverrides());
+        Assert.Null(settings.ValidateHotkeys());
+    }
+
+    [Fact]
+    public void AssignedOverrideIsAcceptedAndReportedWithItsMode()
+    {
+        var binding = new HotkeyBinding { Ctrl = true, Alt = true, Shift = true, Key = Keys.V };
+        AppSettings settings = WithOverrides(enabled: true, physical: binding);
+
+        Assert.Null(settings.ValidateHotkeys());
+        (TypingMode mode, HotkeyBinding assigned) = Assert.Single(settings.AssignedModeOverrides());
+        Assert.Equal(TypingMode.Physical, mode);
+        Assert.Same(binding, assigned);
+    }
+
+    [Fact]
+    public void OverrideMayNotDuplicateThePrimaryTypeHotkey()
+    {
+        AppSettings settings = WithOverrides(enabled: true, physical: new HotkeyBinding());
+
+        string? error = settings.ValidateHotkeys();
+
+        Assert.NotNull(error);
+        Assert.Contains("Type clipboard", error);
+    }
+
+    [Fact]
+    public void OverridesMayNotDuplicateEachOther()
+    {
+        var same = new HotkeyBinding { Ctrl = true, Alt = true, Shift = true, Key = Keys.V };
+        AppSettings settings = WithOverrides(enabled: true,
+            physical: same,
+            unicode: new HotkeyBinding { Ctrl = true, Alt = true, Shift = true, Key = Keys.V });
+
+        string? error = settings.ValidateHotkeys();
+
+        Assert.NotNull(error);
+        Assert.Contains("override", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AnOverrideWithoutAModifierIsRejected()
+    {
+        AppSettings settings = WithOverrides(enabled: true,
+            physical: new HotkeyBinding { Ctrl = false, Alt = false, Key = Keys.V });
+
+        Assert.NotNull(settings.ValidateHotkeys());
+    }
+
+    [Fact]
+    public void ValidationNamesTheModeSoTheUserKnowsWhichRowToFix()
+    {
+        AppSettings settings = WithOverrides(enabled: true, physical: new HotkeyBinding());
+
+        Assert.Contains(TypingModeText.Label(TypingMode.Physical), settings.ValidateHotkeys()!);
+    }
+}

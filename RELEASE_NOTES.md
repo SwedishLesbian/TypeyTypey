@@ -1,6 +1,42 @@
-# TypeyTypey v1.0.5
+# TypeyTypey v1.0.6
 
-TypeyTypey is a tiny native Windows utility for typing clipboard-derived text into applications where paste is unavailable or unreliable. Copy a password, command, URL, or other text; focus the destination; then let TypeyTypey simulate Unicode keyboard input.
+TypeyTypey is a tiny native Windows utility for typing clipboard-derived text into applications where paste is unavailable or unreliable. Copy a password, command, URL, or other text; focus the destination; then let TypeyTypey simulate keyboard input.
+
+## Typing Mode
+
+Clipboard text could only ever be sent as Unicode input. Most Windows applications accept that, but a
+remote console hosted in a browser — iDRAC, VNC, a KVM — usually does not. It never receives
+characters: it receives DOM key events and rebuilds the character from the key's identity plus the
+modifiers held at the time. A Unicode input event carries neither a virtual key nor a scan code, so a
+console reading them could end up with the right letter in the wrong case.
+
+There are now three modes, chosen from the tray icon's **Typing Mode** submenu or in Settings.
+
+- **Unicode Input** — what every earlier version did, and still the default. Arbitrary Unicode.
+- **Physical Keypresses** — real key presses with real modifiers and scan codes. `A` is Shift down, A
+  down, A up, Shift up. This is the one for browser-hosted consoles.
+- **Automatic** — physical where the keyboard layout allows it, Unicode for the rest, decided per
+  character before anything is sent.
+
+**Upgrading changes nothing.** A settings file from an earlier build has no typing mode in it and
+loads as Unicode Input, so how your typing reaches its target is the same until you choose otherwise.
+
+Physical Keypresses preflights the whole string. If any character cannot be produced by the current
+keyboard layout it types nothing at all and names the position and code point of the first one —
+rather than substituting, dropping, or approximating it. Automatic falls those characters back to
+Unicode individually and still sends everything else physically.
+
+Optionally, and off by default, a hotkey can be bound to each mode. Pressing it types once in that
+mode without changing the saved setting.
+
+### What this does not promise
+
+Physical keypresses are mapped through the keyboard layout of the window being typed into, read after
+the initial delay. That is your **local** layout. A remote console configured for a different one can
+still produce different characters, and nothing measurable on this machine can predict it.
+
+Windows accepting the keystrokes is also not evidence that the remote system displayed them.
+TypeyTypey reports whether the injection was accepted locally, and nothing beyond that.
 
 ## Fixes in this release
 

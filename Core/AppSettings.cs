@@ -12,6 +12,26 @@ internal sealed class AppSettings
     /// property initialiser supplies the default rather than leaving a null binding behind.
     /// </summary>
     public HotkeyBinding StopTypingHotkey { get; set; } = new() { Key = Keys.X };
+    /// <summary>
+    /// How text is turned into keystrokes. Absent from settings files written before v1.0.6, which
+    /// deserialize to <see cref="TypingMode.Unicode"/> — the behaviour those builds had — so an
+    /// upgrade never silently changes how an existing user's typing reaches its target.
+    /// </summary>
+    public TypingMode TypingMode { get; set; } = TypingMode.Unicode;
+
+    /// <summary>Opt-in. While false the three bindings below are neither validated nor registered.</summary>
+    public bool TypingModeOverridesEnabled { get; set; }
+
+    /// <summary>
+    /// One-shot hotkeys that type in a named mode without changing <see cref="TypingMode"/>. Null
+    /// means unassigned, which is the default for all three and is always allowed.
+    /// </summary>
+    public HotkeyBinding? AutomaticModeHotkey { get; set; }
+
+    public HotkeyBinding? UnicodeModeHotkey { get; set; }
+
+    public HotkeyBinding? PhysicalModeHotkey { get; set; }
+
     public int CharacterDelayMs { get; set; } = 15;
     public int InitialDelayMs { get; set; } = 500;
     public bool ClearClipboardAfterTyping { get; set; }
@@ -57,6 +77,22 @@ internal sealed class AppSettings
         // theme in play. System.Text.Json will happily deserialize any integer into the enum.
         if (!Enum.IsDefined(Theme))
             Theme = AppTheme.System;
+        if (!Enum.IsDefined(TypingMode))
+            TypingMode = TypingMode.Unicode;
+    }
+
+    /// <summary>
+    /// The override hotkeys that are actually in play, paired with the mode each one types in.
+    /// Empty when the feature is off or nothing is assigned, which is the default.
+    /// </summary>
+    public IEnumerable<(TypingMode Mode, HotkeyBinding Binding)> AssignedModeOverrides()
+    {
+        if (!TypingModeOverridesEnabled)
+            yield break;
+
+        if (AutomaticModeHotkey is not null) yield return (TypingMode.Automatic, AutomaticModeHotkey);
+        if (UnicodeModeHotkey is not null) yield return (TypingMode.Unicode, UnicodeModeHotkey);
+        if (PhysicalModeHotkey is not null) yield return (TypingMode.Physical, PhysicalModeHotkey);
     }
 
     /// <summary>
@@ -66,12 +102,17 @@ internal sealed class AppSettings
     /// </summary>
     public string? ValidateHotkeys()
     {
-        (string Name, HotkeyBinding Binding)[] all =
-        [
+        var all = new List<(string Name, HotkeyBinding Binding)>
+        {
             ("Type clipboard", TypeClipboardHotkey),
             ("Clipboard history", HistoryHotkey),
             ("Stop typing", StopTypingHotkey)
-        ];
+        };
+
+        // Unassigned overrides are not an error — they are the default. Only what the user actually
+        // bound takes part in the uniqueness check, and only while the feature is switched on.
+        foreach ((TypingMode mode, HotkeyBinding binding) in AssignedModeOverrides())
+            all.Add(($"{TypingModeText.Label(mode)} override", binding));
 
         foreach ((string name, HotkeyBinding binding) in all)
         {
@@ -79,9 +120,9 @@ internal sealed class AppSettings
                 return $"The {name.ToLowerInvariant()} hotkey needs at least one modifier key.";
         }
 
-        for (int first = 0; first < all.Length; first++)
+        for (int first = 0; first < all.Count; first++)
         {
-            for (int second = first + 1; second < all.Length; second++)
+            for (int second = first + 1; second < all.Count; second++)
             {
                 if (all[first].Binding.IsSameAs(all[second].Binding))
                     return $"{all[first].Name} and {all[second].Name.ToLowerInvariant()} are set to the same combination. Give each one a different key.";
