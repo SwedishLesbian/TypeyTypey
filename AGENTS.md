@@ -399,6 +399,71 @@ appearance or for Task Scheduler itself; no agent has seen either run.
 - [ ] `--admintask` creates the task on the system that previously rejected the XML.
 - [ ] Cancellation mid-run and during a shifted character leaves no modifier down.
 
+## 9c. Plan for v1.0.6
+
+Written 2026-07-30, at the point v1.0.5 was merged to `main`. This is the carried-forward list, so
+none of it depends on remembering a conversation.
+
+### Release state of v1.0.5
+
+`main` is at the v1.0.5 merge and CI is green there — 232 tests, Release publish, artifact uploaded.
+**The `v1.0.5` tag was never created**, so no GitHub Release exists for it. The agent session that
+merged it could not push one: this environment refuses `refs/tags/*` with HTTP 403, and refuses ref
+deletions for the same reason. Branch creates and updates are allowed. Anything requiring a tag, a
+release, or a branch deletion has to be done by the maintainer:
+
+```bash
+git fetch origin main && git checkout main && git pull --ff-only
+git tag -a v1.0.5 -m "TypeyTypey v1.0.5" && git push origin v1.0.5
+```
+
+The tag triggers `publish.yml`, which builds the release and uses `RELEASE_NOTES.md` as the body.
+
+### Carried into v1.0.6 — defects
+
+| Item | State | Cause, where known |
+|---|---|---|
+| **#11** Escape does not dismiss the delete-confirmation prompt | Open, unfixed | `MessageBoxButtons.YesNo` has no Cancel button, and Windows ignores ESC on a message box without one. Needs a different button set or a small owned dialog. Cheap, and the only known functional defect carried forward. |
+| **#12** `--admintask` scheduled task | Fixed in v1.0.5, **unverified** | The XML declared schema 1.2 while using two 1.3 elements, so Task Scheduler rejected the whole document. Both removed; a bounded, allowlisted compatibility retry sits behind it. Needs confirming on the machine that produced the error. |
+
+### Carried into v1.0.6 — validation the agent cannot perform
+
+Everything in §9b under *Still unobserved* remains owed, because no agent session has had a Windows
+desktop. In v1.0.5 that is: the Typing Mode submenu in both themes, the tick beside the active mode,
+disabled items and the submenu arrow, the Help window, the Settings card, override hotkeys, and
+scheduled-task creation. The maintainer's smoke checklist for v1.0.5 is the list in §9b.
+
+### Documented, deliberately not fixed
+
+Recorded so they are not rediscovered as bugs. Each is explained in the Help window
+(`Core/HelpTopics.cs`), which is where a user meets them.
+
+- **Unicode mode loses case in iDRAC.** The console never receives modifier state. This is why
+  Physical Keypresses exists; it is not fixable in the Unicode path.
+- **Physical mode can trigger application shortcuts** — Chrome tab groups, observed. A
+  modifier-dependent character is indistinguishable from the shortcut using the same keys, and the
+  target decides which it is. The remedy is switching modes, not a code change.
+- **An elevated Windows Terminal blocks an unelevated TypeyTypey** from typing into any of its
+  windows, including apparently unelevated tabs. `conhost.exe` is unaffected. A Windows Terminal
+  integrity interaction, not a TypeyTypey defect.
+- **Clipboard text copied before startup** types with the hotkey but is absent from the history
+  picker, and history never survives a restart. Accepted behaviour.
+
+### Candidates, not commitments
+
+Decide these deliberately rather than by drift.
+
+- **Default new installations to Automatic.** Today every installation, new or upgraded, starts on
+  Unicode Input — chosen because Automatic had no runtime mileage at the time (§9b). Now that
+  Physical and Automatic are confirmed working in iDRAC, defaulting *new* installations to Automatic
+  is arguable. It needs a way to tell new from upgraded that is not brittle, and it is a change to
+  behaviour on first run, so it belongs to a release where it can be said out loud.
+- **Non-US keyboard layouts are unverified.** `VkKeyScanEx` mapping, AltGr as right-Alt, and the
+  refusal path for characters a layout cannot produce have unit coverage against fake layouts only.
+  No real non-US layout has been exercised.
+- **The scheduler compatibility retry has never fired against a real Task Scheduler.** Its decision
+  rules are tested; the path from a genuine parser rejection to a successful retry is not.
+
 ## 10. Escalate rather than decide
 
 Stop and ask the maintainer when a change would:
