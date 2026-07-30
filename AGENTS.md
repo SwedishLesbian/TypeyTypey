@@ -168,7 +168,9 @@ size, `AppSettings.Normalize` clamps, theme persistence and settings-file compat
 `HotkeyBinding` validity and equality, version formatting, and `WindowPlacement` sizing and
 monitor-clamping policy, `--admintask` parsing, scheduled-task XML and picker selection rules.
 v1.0.5 adds the modifier-release decision rule, three-way hotkey validation, working-area fitting,
-`--help` parsing and the product metadata About reads. 125 tests as of v1.0.5.
+`--help` parsing and the product metadata About reads, and typing-mode planning, key-event
+ordering, mode persistence and override-hotkey validation. 177 tests as of v1.0.6, from the Release
+run on windows-latest rather than counted by hand.
 
 `HelpCommandTests.EveryDocumentedOption_IsAcceptedByTheParser` is worth keeping. It walks
 `CommandLine.Options` — the list the Help window renders — and asserts each entry actually parses,
@@ -365,7 +367,8 @@ release again in case the process ends before that unwinds.
 ### Not verified at runtime **[BLOCKING for a release]**
 
 Implemented on a Linux container that cannot build this project (§4). Planning, key-event ordering
-and the settings rules have unit coverage — 111 tests, 69 of which run under `tools/linux-check`.
+and the settings rules have unit coverage — 177 tests in all, 69 of which run under
+`tools/linux-check`.
 **Nothing below has been observed.** Tracked in #16.
 
 | Target | Unicode Input | Physical Keypresses | Automatic |
