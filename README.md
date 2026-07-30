@@ -106,7 +106,7 @@ Windows accepting the keystrokes is not evidence that the remote system displaye
 
 #### Typing-mode override hotkeys
 
-Off by default. When enabled, you can bind a hotkey to each mode; pressing it types once in that mode without changing the saved Typing Mode. Any of them may be left unassigned. They use the same clipboard, history selection and startup delay as the normal type hotkey, and the mode is decided by which hotkey you pressed—not by whatever window had focus when you pressed it.
+Off by default, and all three start unassigned. When enabled, you can bind a hotkey to each mode; pressing it types once in that mode without changing the saved Typing Mode. Any of them may be left unassigned. They use the same clipboard, history selection and startup delay as the normal type hotkey, and the mode is decided by which hotkey you pressed—not by whatever window had focus when you pressed it.
 
 ### Tray and settings
 

@@ -626,7 +626,7 @@ public sealed class TypingModeSettingsTests
         {
             TypingMode = TypingMode.Automatic,
             TypingModeOverridesEnabled = true,
-            PhysicalModeHotkey = new HotkeyBinding { Ctrl = true, Alt = true, Shift = true, Key = Keys.V }
+            PhysicalModeHotkey = new HotkeyBinding { Ctrl = true, Alt = true, Key = Keys.P }
         };
 
         AppSettings? restored = JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(original));
@@ -674,7 +674,9 @@ public sealed class TypingModeOverrideHotkeyTests
     [Fact]
     public void AssignedOverrideIsAcceptedAndReportedWithItsMode()
     {
-        var binding = new HotkeyBinding { Ctrl = true, Alt = true, Shift = true, Key = Keys.V };
+        // Not Ctrl+Alt+Shift+V: that is the default clipboard-history hotkey, and validation is
+        // right to reject it. Ctrl+Alt+P collides with none of the three defaults.
+        var binding = new HotkeyBinding { Ctrl = true, Alt = true, Key = Keys.P };
         AppSettings settings = WithOverrides(enabled: true, physical: binding);
 
         Assert.Null(settings.ValidateHotkeys());
@@ -697,10 +699,10 @@ public sealed class TypingModeOverrideHotkeyTests
     [Fact]
     public void OverridesMayNotDuplicateEachOther()
     {
-        var same = new HotkeyBinding { Ctrl = true, Alt = true, Shift = true, Key = Keys.V };
+        var same = new HotkeyBinding { Ctrl = true, Alt = true, Key = Keys.P };
         AppSettings settings = WithOverrides(enabled: true,
             physical: same,
-            unicode: new HotkeyBinding { Ctrl = true, Alt = true, Shift = true, Key = Keys.V });
+            unicode: new HotkeyBinding { Ctrl = true, Alt = true, Key = Keys.P });
 
         string? error = settings.ValidateHotkeys();
 
@@ -722,6 +724,8 @@ public sealed class TypingModeOverrideHotkeyTests
     {
         AppSettings settings = WithOverrides(enabled: true, physical: new HotkeyBinding());
 
-        Assert.Contains(TypingModeText.Label(TypingMode.Physical), settings.ValidateHotkeys()!);
+        // ValidateHotkeys lowercases the second name mid-sentence, so match without regard to case.
+        Assert.Contains(TypingModeText.Label(TypingMode.Physical), settings.ValidateHotkeys()!,
+            StringComparison.OrdinalIgnoreCase);
     }
 }
