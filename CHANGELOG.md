@@ -24,12 +24,23 @@ All notable changes to TypeyTypey are documented here.
   mode without changing the saved setting.
 - Every modifier TypeyTypey presses is released on completion, cancellation, injection failure,
   unexpected error and shutdown.
+- **The Typing Mode submenu is readable in dark mode.** Menu theming stopped at the top level, and a
+  submenu is a separate window with its own colours, so it kept the system defaults — dark text on
+  the dark background it inherited. Theming now recurses through every submenu, and disabled text and
+  the submenu arrow are drawn from the theme rather than from fixed system colours.
+- **`--admintask` can create its scheduled task again.** The definition declared task schema 1.2
+  while using two elements introduced in 1.3, so Task Scheduler rejected the document outright and no
+  task was created. Both are removed; their defaults were already what the task wanted. Behind that,
+  an optional element Windows does not recognise is now dropped and registration retried — bounded to
+  three attempts and to an allowlist that excludes anything deciding what the task runs or runs as.
+- Help gained operational guidance drawn from manual testing: choosing a typing mode, physical
+  keypresses being read as application shortcuts, clipboard text copied before startup, elevation
+  limits, and the elevated–Windows Terminal interaction.
 
 Physical Keypresses maps through the keyboard layout of the window being typed into, read after the
 initial delay. A remote console configured for a different layout may still produce different
 characters; nothing measurable on this machine can predict that. Windows accepting the injection is
 also not evidence that the remote system displayed the text.
-
 
 - **Fixed: typing was corrupted and cut short when TypeyTypey was not running as administrator.**
   Held modifier keys leaked into the typed text, so characters reached the target as control codes

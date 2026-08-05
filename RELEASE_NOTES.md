@@ -54,6 +54,20 @@ Two smaller corrections came with it: waiting for the modifier keys now gives up
 and says so, rather than waiting indefinitely with no indication, and the check that two hotkeys are
 not set to the same combination now covers all three.
 
+**The Typing Mode submenu was unreadable in dark mode.** The tray menu itself was themed, but a
+submenu is a separate window with its own colours, so expanding Typing Mode gave dark text on a dark
+background. Every submenu is now themed, along with two things the menu draws from fixed system
+colours rather than the theme: the greyed-out text of a disabled item, and the little arrow beside a
+submenu.
+
+**`--admintask` could not create a scheduled task.** The task definition declared one version of the
+Windows Task Scheduler format while using two settings introduced in a later one, so Windows rejected
+the whole thing with a parser error and no task was created. Both settings are gone; their defaults
+were what the task wanted anyway. If a future version of Windows objects to another optional setting
+in the same way, TypeyTypey now drops that one setting and retries, and reports which it dropped —
+but only for settings that cannot change what the task runs or the account it runs as. Anything else
+still fails, with the error Windows gave.
+
 ## New in this release
 
 **A Stop typing hotkey, `Ctrl+Alt+X` by default.** It cancels a run already under way and leaves
@@ -67,6 +81,12 @@ every command-line option with an explanation. Open it from the tray menu or wit
 **About now reports the executable's own details** — product, description, author, version and
 copyright — instead of a fixed string, so it cannot drift from what the file's properties page says.
 
+**Help now covers the things worth knowing before you hit them.** Which typing mode to reach for and
+why, that physical keypresses can be read as keyboard shortcuts by the target application, that text
+copied before TypeyTypey started can be typed but will not be in the history picker, that an
+unelevated TypeyTypey cannot type into an elevated window, and that an elevated Windows Terminal can
+block typing into any Windows Terminal window. All of it from what actually happened during testing.
+
 **Settings has been redesigned.** Related options sit in grouped cards with plain-language captions
 explaining what each one changes, and the Save bar stays in place instead of scrolling away with the
 content. The About section has been removed from Settings, since Help and About now cover it.
@@ -74,7 +94,7 @@ content. The About section has been removed from Settings, since Help and About 
 ## Highlights
 
 - Global hotkeys for current clipboard text and searchable in-memory history
-- Native Unicode `SendInput` typing with configurable initial and per-character delays
+- Three typing modes — Unicode, physical keypresses, or automatic — with configurable initial and per-character delays
 - Keyboard-first history picker, duplicate collapse, and configurable capacity
 - Quiet tray operation, single-instance protection, command-line relay, and optional Windows startup
 - Optional UAC-backed administrator restart for input into elevated applications
